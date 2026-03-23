@@ -1,5 +1,12 @@
 module PartitionedDistributions
 
-# Write your package code here.
+using Distributions: Distributions
+using InvertedIndices: Not
+using LinearAlgebra: LinearAlgebra, I
+
+export conditional, marginal
+
+include("conditional.jl")
+include("marginal.jl")
 
 end
