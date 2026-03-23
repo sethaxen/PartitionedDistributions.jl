@@ -1,9 +1,23 @@
 name = "PartitionedDistributions"
 uuid = "569bd051-8d7b-4221-bcb8-d78512b5866a"
-authors = ["Seth Axen <seth@sethaxen.com> and contributors"]
 version = "0.0.1-DEV"
+authors = ["Seth Axen <seth@sethaxen.com> and contributors"]
+
+[deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+IrrationalConstants = "92d709cd-6900-40b7-9082-c6be49f344b6"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LogExpFunctions = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
+PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [compat]
+Distributions = "0.25.123"
+IrrationalConstants = "0.2.6"
+LinearAlgebra = "1.12.0"
+LogExpFunctions = "0.3.29"
+PDMats = "0.11.37"
+SpecialFunctions = "2.7.1"
 julia = "1.10"
 
 [extras]
