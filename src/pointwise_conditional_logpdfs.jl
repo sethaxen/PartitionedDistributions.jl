@@ -308,7 +308,7 @@ _pdmul(A::PDMats.AbstractPDMat, b::StridedVector) = A * b
 function _pdmul(A::PDMats.AbstractPDMat, b::AbstractVector)
     T = Base.promote_eltype(A, b)
     y = similar(b, T)
-    mul!(y, A, b)
+    LinearAlgebra.mul!(y, A, b)
     return y
 end
 
