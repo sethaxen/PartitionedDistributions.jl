@@ -5,6 +5,8 @@ authors = ["Seth Axen <seth@sethaxen.com> and contributors"]
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
+InvertedIndices = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
 IrrationalConstants = "92d709cd-6900-40b7-9082-c6be49f344b6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LogExpFunctions = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
@@ -12,12 +14,17 @@ PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 
 [compat]
-Distributions = "0.25.123"
+Aqua = "0.8"
+Distributions = "0.25.57"
+FillArrays = "0.9, 0.10, 0.11, 0.12, 0.13, 1"
+InvertedIndices = "1"
 IrrationalConstants = "0.2.6"
-LinearAlgebra = "1.12.0"
+JET = "0.9, 0.10, 0.11"
+LinearAlgebra = "1"
 LogExpFunctions = "0.3.29"
-PDMats = "0.11.37"
+PDMats = "0.10, 0.11"
 SpecialFunctions = "2.7.1"
+Test = "1"
 julia = "1.10"
 
 [extras]

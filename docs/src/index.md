@@ -4,7 +4,7 @@ CurrentModule = PartitionedDistributions
 
 # PartitionedDistributions
 
-Documentation for [PartitionedDistributions](https://github.com/arviz-devs/PartitionedDistributions.jl).
+Documentation for [PartitionedDistributions](https://github.com/sethaxen/PartitionedDistributions.jl).
 
 ```@index
 ```
