@@ -94,20 +94,26 @@ if isdefined(Distributions, :ProductDistribution)
         ) where {N, M}
         ind_in_component = inds[1:M]
         ind_component = inds[(M + 1):N]
-        selected_dists = view(dist.dists, ind_component...)
-        if iszero(ndims(selected_dists))
-            selected_dist = selected_dists[]
-            M == 0 && return selected_dist
+        selection = @views dist.dists[ind_component...]
+        if selection isa Distributions.Distribution
+            M == 0 && return selection
             # recurse into within-component marginal
-            return marginal(selected_dist, ind_in_component...)
+            return marginal(selection, ind_in_component...)
         elseif M == 0
-            return Distributions.product_distribution(selected_dists)
+            return Distributions.product_distribution(selection)
         else
-            marg_dists = map(d -> marginal(d, ind_in_component...), selected_dists)
+            marg_dists = map(d -> marginal(d, ind_in_component...), selection)
             return Distributions.product_distribution(marg_dists)
         end
     end
 end
 if isdefined(Distributions, :Product)
-    marginal(dist::Distributions.Product, i) = Distributions.Product(dist.v[i])
+    function marginal(dist::Distributions.Product, i)
+        marginals = @views dist.v[i]
+        if marginals isa Distributions.Distribution
+            return marginals
+        else
+            return Distributions.Product(marginals)
+        end
+    end
 end

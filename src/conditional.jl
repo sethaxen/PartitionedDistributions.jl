@@ -143,5 +143,5 @@ if isdefined(Distributions, :ProductDistribution)
     end
 end
 if isdefined(Distributions, :Product)
-    conditional(dist::Distributions.Product, ::AbstractVector, i) = dist.v[i]
+    conditional(dist::Distributions.Product, ::AbstractVector, i) = marginal(dist, i)
 end
