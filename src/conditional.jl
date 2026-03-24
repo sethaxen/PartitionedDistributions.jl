@@ -1,11 +1,13 @@
 """
-    conditional(dist, y, keep_indices...) -> ContinuousUnivariateDistribution
+    conditional(dist, x, keep_indices...)
 
-Compute a conditional univariate distribution.
+Given an array-variate distribution `dist` and a point `x` in its support, return the
+distribution of `x[keep_indices...]` conditioned on the remaining elements of `x`.
 
-Given an array-variate distribution `dist` and an array `y` in its support,
-return the univariate distribution of `y[keep_indices...]` given
-the remaining elements of `y`.
+`keep_indices` should index into the support of `dist`. The number of indices must
+match the number of dimensions of the support: one index for multivariate distributions,
+or one index per dimension for array-variate distributions. Linear indexing (a single
+index for a multi-dimensional support) is not supported.
 
 See also: [`marginal`](@ref)
 
@@ -20,10 +22,10 @@ julia> using Distributions, InvertedIndices, PartitionedDistributions
 
 julia> dist = MvNormal([1.0, 2.0], [1.0 0.5; 0.5 1.0]);
 
-julia> conditional(dist, [1.0, 2.0], 1)  # specify index to keep
+julia> conditional(dist, [1.0, 2.0], 1)       # specify index to keep
 Normal{Float64}(μ=1.0, σ=0.8660254037844386)
 
-julia> conditional(dist, [1.0, 2.0], 1:2)  # specify indices to keep
+julia> conditional(dist, [1.0, 2.0], 1:1)     # specify indices to keep
 FullNormal(
 dim: 1
 μ: [1.0]
@@ -40,106 +42,106 @@ dim: 1
 """
 conditional
 
-function conditional(dist::Distributions.AbstractMvNormal, y::AbstractVector, i)
+function conditional(dist::Distributions.AbstractMvNormal, x::AbstractVector, _i)
     # https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Conditional_distributions
+    i = to_indices(x, (_i,))[1]
+    ic = Not(i)
     μ = Distributions.mean(dist)
     Σ = Distributions.cov(dist)
-    ic = Not(i)
-    Σ_ic_i = @views Σ[ic, i]
-    Σ_ic = @views Σ[ic, ic]
-    inv_Σ_ic_Σ_ic_i = LinearAlgebra.cholesky(LinearAlgebra.Symmetric(Σ_ic)) \ Σ_ic_i
-    Σ_cond = Σ[i, i] - inv_Σ_ic_Σ_ic_i' * Σ_ic_i  # Schur complement
-    μ_cond = μ[i] + inv_Σ_ic_Σ_ic_i' * @views(y[ic] - μ[ic])
-    dist_cond = if iszero(ndims(μ_cond))
-        return Distributions.Normal(μ_cond[], sqrt(Σ_cond[]))
+    Σ_cond, B, _ = _schur_complement_and_factor(Σ, i)
+    δ = @views x[ic] .- μ[ic]
+    μ_cond = @views muladd(B', δ, μ[i])
+    if iszero(ndims(μ_cond))
+        return Distributions.Normal(μ_cond[], sqrt(Σ_cond))
     else
-        return Distributions.MvNormal(μ_cond, LinearAlgebra.Symmetric(Σ_cond))
-    end
-    # TODO: support trailing dimensions
-    return dist_cond
-end
-function conditional(dist::Distributions.MvNormalCanon, y::AbstractVector, i)
-    # TODO: handle this directly
-    return conditional(Distributions.MvNormal(Distributions.mean(dist), Distributions.cov(dist)), y, i)
-end
-function conditional(dist::Distributions.MatrixNormal, y::AbstractMatrix, i...)
-    vec_i = @view LinearIndices(y)[i...]
-    if ndims(vec_i) < 2
-        vec_y = vec(y)
-        vec_dist = vec(dist)
-        return conditional(vec_dist, vec_y, vec_i)
-    else  # it's a MatrixNormal
-        # TODO: work out how to compute this efficiently
-        return conditional(dist, y, i)
+        return Distributions.MvNormal(μ_cond, Σ_cond)
     end
 end
-function conditional(dist::Distributions.MvLogNormal, y::AbstractVector, i)
-    dist_cond_norm = conditional(dist.normal, log.(y), i)
+function conditional(dist::Distributions.MvNormalCanon, x::AbstractVector, i)
+    # https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Conditional_distributions
+    ic = Not(i)
+    J = Distributions.invcov(dist)
+    J_cond = view(J, i, i)
+    J_ic_i = view(J, ic, i)
+    h_cond = @views dist.h[i] .- (J_ic_i' * x[ic])
+    if iszero(ndims(h_cond))
+        return Distributions.NormalCanon(h_cond[], J_cond[])
+    else
+        return Distributions.MvNormalCanon(h_cond, LinearAlgebra.Symmetric(J_cond))
+    end
+end
+function conditional(dist::Distributions.MatrixNormal, x::AbstractMatrix, inds::Vararg{Any, 2})
+    # https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Conditional_distributions
+    # also Theorem 2.3.12 of Gupta & Nagar (2000) "Matrix variate distributions" https://doi.org/10.1201/9780203749289
+    i1, i2 = to_indices(x, inds)
+    ic1 = Not(i1)
+    ic2 = Not(i2)
+    M = Distributions.mean(dist)
+    Ucond, BU, _ = _schur_complement_and_factor(dist.U, i1)
+    Vcond, BV, _ = _schur_complement_and_factor(dist.V, i2)
+    dX12 = @views x[ic1, i2] - M[ic1, i2]   # observed rows, kept cols
+    dX21 = @views x[i1, ic2] - M[i1, ic2]   # kept rows, observed cols
+    dX11 = @views x[ic1, ic2] - M[ic1, ic2] # observed rows, observed cols
+    Mcond = view(M, i1, i2) + BU' * dX12 + (dX21 - BU' * dX11) * BV
+    return Distributions.MatrixNormal(Mcond, Ucond, Vcond)
+end
+function conditional(dist::Distributions.MvLogNormal, x::AbstractVector, i)
+    dist_cond_norm = conditional(dist.normal, log.(x), i)
     if dist_cond_norm isa Distributions.UnivariateDistribution
-        return Distributions.LogNormal(dist_cond_norm.μ, dist_cond_norm.σ)
+        return Distributions.LogNormal(Distributions.mean(dist_cond_norm), Distributions.std(dist_cond_norm))
     else # dist_cond_norm isa Distributions.AbstractMvNormal
-        # TODO: support trailing dimensions
-        return Distributions.MvLogNormal(dist_cond_norm)
+        return Distributions.MvLogNormal(_mvnormal(dist_cond_norm))
     end
 end
-function conditional(
-    dist::Distributions.GenericMvTDist, y::AbstractVector, i,
-)
+function conditional(dist::Distributions.GenericMvTDist, x::AbstractVector, i)
     # https://en.wikipedia.org/wiki/Multivariate_t-distribution#Conditional_Distribution
     (; μ, Σ) = dist
     ν = dist.df
     ic = Not(i)
-    Σ_ic_i = @view Σ[ic, i]
-    Σ_ic = @view Σ[ic, ic]
-    chol_Σ_ic = LinearAlgebra.cholesky(LinearAlgebra.Symmetric(Σ_ic))
-    δ = @views y[ic] - μ[ic]
-    d = LinearAlgebra.dot(δ, chol_Σ_ic \ δ)
-    inv_Σ_ic_Σ_ic_i = chol_Σ_ic \ Σ_ic_i
-    Σ_cond = @views Σ[i, i] - inv_Σ_ic_Σ_ic_i' * Σ_ic_i  # Schur complement
-    μ_cond = @views μ[i] + inv_Σ_ic_Σ_ic_i' * δ
-    ν_cond = ν + length(ic)
+    Σ_cond, B, Σ_ic = _schur_complement_and_factor(Σ, i)
+    δ = @views x[ic] .- μ[ic]
+    d = PDMats.invquad(Σ_ic, δ)
+    μ_cond = muladd(B', δ, view(μ, i))
+    ν_cond = ν + length(δ)
 
     if iszero(ndims(μ_cond))
         σ_cond = sqrt(Σ_cond * (ν + d) / ν_cond)
         return Distributions.TDist(ν_cond) * σ_cond + μ_cond[]
     else
+        # avoid recomputing a Cholesky decomposition
         Σ_cond *= (ν + d) / ν_cond
-        return Distributions.GenericMvTDist(ν_cond, μ_cond, LinearAlgebra.Symmetric(Σ_cond))
+        return Distributions.GenericMvTDist(ν_cond, μ_cond, Σ_cond)
     end
 end
 if isdefined(Distributions, :ProductDistribution)
-    # TODO: fix this implementation
     function conditional(
-        dist::Distributions.ProductDistribution{N,M},
-        y::AbstractArray{<:Real,N},
-        i...,
-    ) where {N,M}
-        inds = Tuple(i)
+            dist::Distributions.ProductDistribution{N, M},
+            x::AbstractArray{<:Real, N},
+            inds::Vararg{Any, N},
+        ) where {N, M}
         ind_in_component = inds[1:M]
         ind_component = inds[(M + 1):N]
-        dist_i = dist.dists[inds[(M + 1):N]...]
-        M == 0 && return dist_i
-        y_i = y[fill(Colon(), M)..., ind_component...]
-        ind_in_component = if length(ind_in_component) == 1
-            ind_in_component[1]
+        selected_dists = view(dist.dists, ind_component...)
+        if iszero(ndims(selected_dists))
+            selected_dist = selected_dists[]
+            M == 0 && return selected_dist
+            x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., ind_component...)
+            return conditional(selected_dist, x_comp, ind_in_component...)
+        elseif M == 0
+            # Scalar components are independent: conditioning on other components has no effect
+            return Distributions.product_distribution(selected_dists)
         else
-            CartesianIndex(ind_in_component)
-        end
-        return conditional(dist_i, y_i, ind_in_component)
-    end
-    function conditional(
-        dist::Distributions.ProductDistribution{1,0}, ::AbstractVector, i...
-    )
-        dists_i = dist.dists[i...]
-        if iszero(ndims(dists_i))
-            return dists_i[]
-        else
-            return Distributions.product_distribution(dists_i)
+            x_selected = view(x, ntuple(_ -> Colon(), Val(M))..., ind_component...)
+            batch_dims = ntuple(k -> M + k, ndims(selected_dists))
+            cond_dists = map(
+                (d, x_d) -> conditional(d, x_d, ind_in_component...),
+                selected_dists,
+                eachslice(x_selected; dims = batch_dims),
+            )
+            return Distributions.product_distribution(cond_dists)
         end
     end
 end
 if isdefined(Distributions, :Product)
-    function conditional(dist::Distributions.Product, ::AbstractVector, i)
-        return dist.v[i]
-    end
+    conditional(dist::Distributions.Product, ::AbstractVector, i) = dist.v[i]
 end
