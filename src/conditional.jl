@@ -40,11 +40,11 @@ dim: 1
 conditional
 
 function conditional(
-    dist::Distributions.Distribution{Distributions.ArrayLikeVariate{N}},
-    x::AbstractArray{<:Any, N},
-    _i1,
-    _inds...,
-) where {N}
+        dist::Distributions.Distribution{Distributions.ArrayLikeVariate{N}},
+        x::AbstractArray{<:Any, N},
+        _i1,
+        _inds...,
+    ) where {N}
     ax = axes(dist)
     inds = to_indices(size(dist), ax, (_i1, _inds...))
     _validate_indices(inds)
