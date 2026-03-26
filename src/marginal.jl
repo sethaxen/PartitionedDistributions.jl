@@ -64,7 +64,7 @@ function marginal(dist::Distributions.Distribution{Distributions.ArrayLikeVariat
             return reshape(dist_marg, sz)
         end
     else
-        throw(ArgumentError("Too many indices for array-variate distribution"))
+        throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
     end
 end
 

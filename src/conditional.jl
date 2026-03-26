@@ -74,7 +74,7 @@ function conditional(
             return reshape(dist_cond, sz)
         end
     else
-        throw(ArgumentError("Too many indices for array-variate distribution"))
+        throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
     end
 end
 
