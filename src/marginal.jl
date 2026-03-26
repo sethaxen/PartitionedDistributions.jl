@@ -88,6 +88,8 @@ function _marginal_impl(dist::Distributions.MatrixNormal, i1, i2)
     M_i = view(dist.M, i1, i2)
     if iszero(ndims(M_i))
         return Distributions.Normal(M_i[], sqrt(dist.U[i1, i1] * dist.V[i2, i2]))
+    elseif i1 isa Int || i2 isa Int
+        return Distributions.MvNormal(vec(M_i), dist.U[i1, i1] * dist.V[i2, i2])
     else
         return Distributions.MatrixNormal(M_i, _pdview(dist.U, i1), _pdview(dist.V, i2))
     end

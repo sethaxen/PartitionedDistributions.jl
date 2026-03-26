@@ -118,10 +118,22 @@ function _conditional_impl(dist::Distributions.MatrixNormal, x::AbstractMatrix, 
     Ucond, BU, _ = _schur_complement_and_factor(dist.U, i1)
     Vcond, BV, _ = _schur_complement_and_factor(dist.V, i2)
     dX12 = @views x[ic1, i2] - M[ic1, i2]   # observed rows, kept cols
-    dX21 = @views x[i1, ic2] - M[i1, ic2]   # kept rows, observed cols
     dX11 = @views x[ic1, ic2] - M[ic1, ic2] # observed rows, observed cols
-    Mcond = view(M, i1, i2) + BU' * dX12 + (dX21 - BU' * dX11) * BV
-    return Distributions.MatrixNormal(Mcond, Ucond, Vcond)
+    # When i1 isa Int, x[i1, ic2] drops to 1D; transpose to keep matrix ops consistent
+    dX21 = if i1 isa Int
+        @views (x[i1, ic2] - M[i1, ic2])'
+    else
+        @views x[i1, ic2] - M[i1, ic2]      # kept rows, observed cols
+    end
+    Mview = i1 isa Int ? reshape(view(M, i1, i2), 1, :) : view(M, i1, i2)
+    Mcond = Mview .+ BU' * dX12 .+ (dX21 .- (BU' * dX11)) * BV
+    if i1 isa Int && i2 isa Int
+        return Distributions.Normal(only(Mcond), sqrt(Ucond * Vcond))
+    elseif i1 isa Int || i2 isa Int
+        return Distributions.MvNormal(vec(Mcond), Ucond * Vcond)
+    else
+        return Distributions.MatrixNormal(Mcond, Ucond, Vcond)
+    end
 end
 function _conditional_impl(dist::Distributions.MatrixNormal, x::AbstractMatrix, i)
     return _conditional_impl(vec(dist), vec(x), i)
