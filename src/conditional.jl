@@ -4,8 +4,6 @@
 Given an array-variate distribution `dist` and a point `x` in its support, return the
 distribution of `x[keep_indices...]` conditioned on the remaining elements of `x`.
 
-`keep_indices` should index into the support of `dist`.
-
 See also: [`marginal`](@ref)
 
 # Examples
