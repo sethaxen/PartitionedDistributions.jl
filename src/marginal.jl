@@ -3,10 +3,7 @@
 
 Return the marginal distribution of `dist` at the indices `keep_indices`.
 
-`keep_indices` should index into the support of `dist`. The number of indices must
-match the number of dimensions of the support: one index for multivariate distributions,
-or one index per dimension for array-variate distributions. Linear indexing (a single
-index for a multi-dimensional support) is not supported.
+`keep_indices` should index into the support of `dist`.
 
 See also: [`conditional`](@ref)
 
@@ -37,7 +34,47 @@ dim: 2
 """
 marginal
 
-function marginal(dist::Distributions.AbstractMvNormal, i)
+function marginal(dist::Distributions.Distribution{Distributions.ArrayLikeVariate{N}}, _i1, _inds...) where {N}
+    ax = axes(dist)
+    inds = to_indices(size(dist), ax, (_i1, _inds...))
+    _validate_indices(inds)
+    ninds = length(inds)
+    return if ninds == 1
+        i = inds[1]
+        if i isa Base.Slice
+            return vec(dist)
+        elseif i isa AbstractArray && ndims(i) > 1
+            lin_inds = @views LinearIndices(ax)[i]
+            dist_marg = _marginal_impl(dist, vec(lin_inds))
+            return reshape(dist_marg, size(i))
+        else
+            return _marginal_impl(dist, i)
+        end
+    elseif ninds >= N
+        inds_head = inds[1:N]
+        if all(Base.Fix2(isa, Base.Slice), inds_head)
+            dist_marg = dist
+        else
+            dist_marg = _marginal_impl(dist, inds_head...)
+        end
+        if ninds == N
+            return dist_marg
+        else
+            sz = @views size(LinearIndices(ax)[inds...])
+            return reshape(dist_marg, sz)
+        end
+    else
+        throw(ArgumentError("Too many indices for array-variate distribution"))
+    end
+end
+
+function _marginal_impl(dist::Distributions.UnivariateDistribution, i)
+    all(isone, i) || throw(ArgumentError("Too many indices for univariate distribution"))
+    i isa Int && return dist
+    return vec(dist)
+end
+
+function _marginal_impl(dist::Distributions.AbstractMvNormal, i)
     μ = Distributions.mean(dist)
     Σ = Distributions.cov(dist)
     μ_i = view(μ, i)
@@ -47,7 +84,7 @@ function marginal(dist::Distributions.AbstractMvNormal, i)
         return Distributions.MvNormal(μ_i, _pdview(Σ, i))
     end
 end
-function marginal(dist::Distributions.MatrixNormal, i1, i2)
+function _marginal_impl(dist::Distributions.MatrixNormal, i1, i2)
     M_i = view(dist.M, i1, i2)
     if iszero(ndims(M_i))
         return Distributions.Normal(M_i[], sqrt(dist.U[i1, i1] * dist.V[i2, i2]))
@@ -55,7 +92,10 @@ function marginal(dist::Distributions.MatrixNormal, i1, i2)
         return Distributions.MatrixNormal(M_i, _pdview(dist.U, i1), _pdview(dist.V, i2))
     end
 end
-function marginal(dist::Distributions.MvLogNormal, i)
+function _marginal_impl(dist::Distributions.MatrixNormal, i)
+    return _marginal_impl(vec(dist), i)
+end
+function _marginal_impl(dist::Distributions.MvLogNormal, i)
     dist_marg_norm = marginal(dist.normal, i)
     if dist_marg_norm isa Distributions.UnivariateDistribution
         return Distributions.LogNormal(dist_marg_norm.μ, dist_marg_norm.σ)
@@ -63,7 +103,7 @@ function marginal(dist::Distributions.MvLogNormal, i)
         return Distributions.MvLogNormal(dist_marg_norm)
     end
 end
-function marginal(dist::Distributions.GenericMvTDist, i)
+function _marginal_impl(dist::Distributions.GenericMvTDist, i)
     μ_i = view(dist.μ, i)
     if iszero(ndims(μ_i))
         return muladd(Distributions.TDist(dist.df), sqrt(only(dist.Σ[i, i])), μ_i[])
@@ -71,14 +111,22 @@ function marginal(dist::Distributions.GenericMvTDist, i)
         return Distributions.GenericMvTDist(dist.df, μ_i, _pdview(dist.Σ, i))
     end
 end
-function marginal(dist::Distributions.MixtureModel, inds...)
+function _marginal_impl(dist::Distributions.MixtureModel, i)
+    return Distributions.MixtureModel(
+        marginal.(Distributions.components(dist), Ref(i)),
+        Distributions.probs(dist),
+    )
+end
+function _marginal_impl(dist::Distributions.MixtureModel{Distributions.ArrayLikeVariate{N}}, i1, i2, irest...) where {N}
+    inds = (i1, i2, irest...)
+    length(inds) == N || throw(ArgumentError("Too many indices for array-variate distribution"))
     return Distributions.MixtureModel(
         marginal.(Distributions.components(dist), Ref.(inds)...),
         Distributions.probs(dist),
     )
 end
 if isdefined(Distributions, :JointOrderStatistics)
-    function marginal(dist::Distributions.JointOrderStatistics, i)
+    function _marginal_impl(dist::Distributions.JointOrderStatistics, i)
         ranks = view(dist.ranks, i)
         if iszero(ndims(ranks))
             return Distributions.OrderStatistic(dist.dist, dist.n, ranks[])
@@ -88,7 +136,7 @@ if isdefined(Distributions, :JointOrderStatistics)
     end
 end
 if isdefined(Distributions, :ProductDistribution)
-    function marginal(
+    function _marginal_impl(
             dist::Distributions.ProductDistribution{N, M},
             inds::Vararg{Any, N},
         ) where {N, M}
@@ -106,9 +154,10 @@ if isdefined(Distributions, :ProductDistribution)
             return Distributions.product_distribution(marg_dists)
         end
     end
+    # TODO: handle linear indexing for ProductDistribution
 end
 if isdefined(Distributions, :Product)
-    function marginal(dist::Distributions.Product, i)
+    function _marginal_impl(dist::Distributions.Product, i)
         marginals = @views dist.v[i]
         if marginals isa Distributions.Distribution
             return marginals

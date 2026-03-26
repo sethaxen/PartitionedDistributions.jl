@@ -29,3 +29,16 @@ _pdview(A::PDMats.ScalMat, i) = PDMats.ScalMat(size(view(A, i, i), 1), first(A))
 
 _mvnormal(dist::Distributions.MvNormal) = dist
 _mvnormal(dist::Distributions.AbstractMvNormal) = Distributions.MvNormal(Distributions.mean(dist), Distributions.cov(dist))
+
+function _validate_indices(inds)
+    return foreach(_validate_index, inds)
+end
+
+_validate_index(i::Base.Slice) = nothing
+_validate_index(i::Base.LogicalIndex) = nothing
+_validate_index(i::Int) = nothing
+_validate_index(i::Not) = nothing
+function _validate_index(i::Base.AbstractArray)
+    allunique(i) || throw(ArgumentError("Indices must be unique"))
+    return nothing
+end
