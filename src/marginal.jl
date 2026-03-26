@@ -3,7 +3,7 @@
 
 Return the marginal distribution of `dist` at the indices `keep_indices`.
 
-`keep_indices` should index into the support of `dist`.
+`keep_indices` must index into any point in the support of `dist`.
 
 See also: [`conditional`](@ref)
 

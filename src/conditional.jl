@@ -1,8 +1,11 @@
 """
     conditional(dist, x, keep_indices...)
 
-Given an array-variate distribution `dist` and a point `x` in its support, return the
-distribution of `x[keep_indices...]` conditioned on the remaining elements of `x`.
+Return the distribution of `dist` at the indices `keep_indices` conditioned on the elements
+of `x` not at `x[keep_indices...]`.
+
+`x` must be in the support of `dist`, and `keep_indices` must index into any point in the
+support of `dist`.
 
 See also: [`marginal`](@ref)
 
