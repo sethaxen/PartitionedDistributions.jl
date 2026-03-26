@@ -138,8 +138,10 @@ end
 if isdefined(Distributions, :ProductDistribution)
     function _marginal_impl(
             dist::Distributions.ProductDistribution{N, M},
-            inds::Vararg{Any, N},
+            i1, i2, irest...,
         ) where {N, M}
+        inds = (i1, i2, irest...)
+        length(inds) == N || throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
         ind_in_component = inds[1:M]
         ind_component = inds[(M + 1):N]
         selection = @views dist.dists[ind_component...]
@@ -154,7 +156,29 @@ if isdefined(Distributions, :ProductDistribution)
             return Distributions.product_distribution(marg_dists)
         end
     end
-    # TODO: handle linear indexing for ProductDistribution
+    function _marginal_impl(
+            dist::Distributions.ProductDistribution{N, M},
+            lin_i,
+        ) where {N, M}
+        ax = axes(dist)
+        cart = CartesianIndices(ax)[lin_i]
+        batch_inds = map(c -> CartesianIndex(ntuple(k -> c[M + k], Val(N - M))), cart)
+        within_inds = map(c -> CartesianIndex(ntuple(k -> c[k], Val(M))), cart)
+        unique_batches = unique(batch_inds)
+        groups = map(b -> within_inds[batch_inds .== b], unique_batches)
+        allequal(length.(groups)) || throw(
+            ArgumentError(
+                "linear indices select different numbers of elements from different components; " *
+                    "cannot represent result as a ProductDistribution"
+            )
+        )
+        marg_dists = map(unique_batches, groups) do b, ws
+            comp = dist.dists[b]
+            M == 0 && return comp
+            return marginal(comp, LinearIndices(axes(comp))[ws])
+        end
+        return Distributions.ProductDistribution(vec(marg_dists))
+    end
 end
 if isdefined(Distributions, :Product)
     function _marginal_impl(dist::Distributions.Product, i)
