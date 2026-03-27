@@ -61,6 +61,7 @@ function marginal(dist::Distributions.Distribution{Distributions.ArrayLikeVariat
             return dist_marg
         else
             sz = @views size(LinearIndices(ax)[inds...])
+            length(sz) == length(size(dist_marg)) && return dist_marg
             return reshape(dist_marg, sz)
         end
     else

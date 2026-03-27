@@ -72,6 +72,7 @@ function conditional(
             return dist_cond
         else
             sz = @views size(LinearIndices(ax)[inds...])
+            length(sz) == length(size(dist_cond)) && return dist_cond
             return reshape(dist_cond, sz)
         end
     else
