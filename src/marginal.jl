@@ -165,7 +165,7 @@ if isdefined(Distributions, :ProductDistribution)
             lin_i,
         ) where {N, M}
         ax = axes(dist)
-        cart = CartesianIndices(ax)[lin_i]
+        cart = @views CartesianIndices(ax)[lin_i]
         if cart isa CartesianIndex
             dist_i = Tuple(cart)[(M + 1):N]
             factor = dist.dists[dist_i...]
@@ -173,6 +173,7 @@ if isdefined(Distributions, :ProductDistribution)
             within_dist_i = Tuple(cart)[1:M]
             return marginal(factor, within_dist_i...)
         end
+        isempty(cart) && throw(ArgumentError("At least one element must be selected."))
         dist_inds, n_per_dist = StatsBase.rle([CartesianIndex(Tuple(c)[(M + 1):N]) for c in cart])
         allequal(n_per_dist) || throw(ArgumentError("Linear indices must select the same number of elements from each factor distribution"))
         allunique(dist_inds) || throw(ArgumentError("Indices for elements of the same factor distribution must be contiguous"))
