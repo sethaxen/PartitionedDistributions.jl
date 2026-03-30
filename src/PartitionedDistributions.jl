@@ -5,6 +5,7 @@ using FillArrays: FillArrays
 using InvertedIndices: Not
 using LinearAlgebra: LinearAlgebra, I
 using PDMats: PDMats
+using StatsBase: StatsBase
 
 export conditional, marginal
 
