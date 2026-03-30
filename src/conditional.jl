@@ -204,24 +204,29 @@ if isdefined(Distributions, :ProductDistribution)
             lin_i,
         ) where {N, M}
         ax = axes(dist)
-        cart = CartesianIndices(ax)[lin_i]
-        batch_inds = map(c -> CartesianIndex(ntuple(k -> c[M + k], Val(N - M))), cart)
-        within_inds = map(c -> CartesianIndex(ntuple(k -> c[k], Val(M))), cart)
-        unique_batches = unique(batch_inds)
-        groups = map(b -> within_inds[batch_inds .== b], unique_batches)
-        allequal(length.(groups)) || throw(
-            ArgumentError(
-                "linear indices select different numbers of elements from different components; " *
-                    "cannot represent result as a ProductDistribution"
-            )
-        )
-        cond_dists = map(unique_batches, groups) do b, ws
-            comp = dist.dists[b]
-            M == 0 && return comp
-            x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., b)
-            return conditional(comp, x_comp, LinearIndices(axes(comp))[ws])
+        cart = @views CartesianIndices(ax)[lin_i]
+        if cart isa CartesianIndex
+            dist_i = Tuple(cart)[(M + 1):N]
+            factor = dist.dists[dist_i...]
+            M == 0 && return factor
+            x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., dist_i...)
+            within_dist_i = Tuple(cart)[1:M]
+            return conditional(factor, x_comp, within_dist_i...)
         end
-        return Distributions.ProductDistribution(vec(cond_dists))
+        dist_inds, n_per_dist = StatsBase.rle([CartesianIndex(Tuple(c)[(M + 1):N]) for c in cart])
+        allequal(n_per_dist) || throw(ArgumentError("Linear indices must select the same number of elements from each factor distribution"))
+        allunique(dist_inds) || throw(ArgumentError("Indices for elements of the same factor distribution must be contiguous"))
+        n = first(n_per_dist)
+        cart_mat = reshape(cart, n, :)
+        cond_dists = map(zip(eachcol(cart_mat), dist_inds)) do (col, dist_ind)
+            factor = dist.dists[dist_ind]
+            M == 0 && return factor
+            x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., dist_ind)
+            lin_inds_i = LinearIndices(axes(factor))
+            within_dist_i = map(c -> lin_inds_i[CartesianIndex(Tuple(c)[1:M])], col)
+            return conditional(factor, x_comp, within_dist_i)
+        end
+        return Distributions.product_distribution(cond_dists)
     end
 end
 if isdefined(Distributions, :Product)
