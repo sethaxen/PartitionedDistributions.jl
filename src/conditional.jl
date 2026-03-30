@@ -47,7 +47,7 @@ function conditional(
         _inds...,
     ) where {N}
     ax = axes(dist)
-    inds = to_indices(size(dist), ax, (_i1, _inds...))
+    inds = to_indices(x, (_i1, _inds...))
     _validate_indices(inds)
     ninds = length(inds)
     return if ninds == 1

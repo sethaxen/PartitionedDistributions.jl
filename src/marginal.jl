@@ -36,7 +36,8 @@ marginal
 
 function marginal(dist::Distributions.Distribution{Distributions.ArrayLikeVariate{N}}, _i1, _inds...) where {N}
     ax = axes(dist)
-    inds = to_indices(size(dist), ax, (_i1, _inds...))
+    cart = CartesianIndices(ax)
+    inds = to_indices(cart, (_i1, _inds...))
     _validate_indices(inds)
     ninds = length(inds)
     return if ninds == 1
