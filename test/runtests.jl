@@ -1,7 +1,10 @@
 using PartitionedDistributions
+using Random
 using Test
 using Aqua
 using JET
+
+Random.seed!(14579)
 
 @testset "PartitionedDistributions.jl" begin
     @testset "Code quality (Aqua.jl)" begin

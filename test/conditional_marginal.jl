@@ -3,12 +3,21 @@ using InvertedIndices: Not
 using LinearAlgebra
 using PartitionedDistributions
 using PDMats: PDMat, PDiagMat, ScalMat
+using Random
 using Test
+
+"""Symmetric positive definite `n×n` matrix (dense, typically correlated)."""
+function _rand_spd(n::Int)
+    A = randn(n, n)
+    return Matrix(Symmetric(A * A' + (n + 1) * I))
+end
+
+_rand_pdmat(n::Int) = PDMat(_rand_spd(n))
 
 @testset "conditional-marginal consistency" begin
     @testset "Univariate (ArrayLikeVariate{0})" begin
-        dist = Normal(0, 1)
-        x = fill(0.5)
+        dist = Normal(randn(), 0.25 + abs(randn()))
+        x = fill(randn())
         test_univariate_arraylike_indexing(dist, x)
         @test_throws ArgumentError marginal(dist, 1:2)
         @test_throws ArgumentError marginal(dist, [1, 1])
@@ -17,49 +26,37 @@ using Test
     end
 
     @testset "AbstractMvNormal (MvNormal)" begin
-        Σ = [1.0 0.5 0.25; 0.5 1.0 0.5; 0.25 0.5 1.0]
-        dist = MvNormal([1.0, 2.0, 3.0], Σ)
-        y = [0.5, 1.5, 2.5]
+        Σ = _rand_spd(3)
+        dist = MvNormal(randn(3), Σ)
+        y = rand(dist)
         test_all_index_combos(dist, y)
         @testset "duplicate indices in vector selector" begin
             @test_throws ArgumentError marginal(dist, [1, 1])
             @test_throws ArgumentError conditional(dist, y, [1, 1])
         end
         @testset "single index argument is Colon" begin
-            Σ_i = Matrix{Float64}(I, 3, 3)
-            mvn = MvNormal([1.0, 2.0, 3.0], Σ_i)
-            yv = mean(mvn)
+            Σ_i = _rand_spd(3)
+            mvn = MvNormal(randn(3), Σ_i)
+            yv = rand(mvn)
             @test marginal(mvn, :) === mvn
             @test conditional(mvn, yv, :) === mvn
         end
     end
 
     @testset "MvNormalCanon" begin
-        J = [2.0 -0.5 0.0; -0.5 2.0 -0.5; 0.0 -0.5 2.0]
-        dist = MvNormalCanon([1.0, 2.0, 3.0], J)
-        y = [0.5, 1.5, 2.5]
+        J = _rand_spd(3)
+        μ_c = randn(3)
+        dist = MvNormalCanon(μ_c, J)
+        y = rand(MvNormal(μ_c, Symmetric(inv(J))))
         test_all_index_combos(dist, y)
     end
 
     @testset "MatrixNormal (row/col partition)" begin
-        M = [1.0 2 3 4; 5 6 7 8; 9 10 11 12]
-        U = PDMat(
-            [
-                4.0 1.0 0.5
-                1.0 3.0 0.5
-                0.5 0.5 2.0
-            ]
-        )
-        V = PDMat(
-            [
-                2.0 0.5 0.25 0.1
-                0.5 2.0 0.5 0.25
-                0.25 0.5 2.0 0.5
-                0.1 0.25 0.5 2.0
-            ]
-        )
+        M = randn(3, 4)
+        U = _rand_pdmat(3)
+        V = _rand_pdmat(4)
         dist = MatrixNormal(M, U, V)
-        y = M + 0.1 .* [1 -2 3 -1; -1 2 -3 1; 2 -1 1 -2]
+        y = rand(dist)
         row_specs = Any[1:2, [1, 2], Not(3), Bool[true, true, false], 1:1]
         col_specs = Any[1:3, [1, 2, 3], Not(4), Bool[true, true, true, false], 1:1]
         test_axis_aligned_partition_combos(dist, y, (row_specs, col_specs))
@@ -93,24 +90,11 @@ using Test
         # MatrixNormal), we verify consistency against the equivalent MvNormal:
         # vec(X) ~ MvNormal(vec(M), kron(V, U)) for X ~ MatrixNormal(M, U, V).
         m, n = 3, 4
-        M = [1.0 2 3 4; 5 6 7 8; 9 10 11 12]
-        U = PDMat(
-            [
-                4 1 0.5
-                1 3 0.5
-                0.5 0.5 2
-            ]
-        )
-        V = PDMat(
-            [
-                2 0.5 0.25 0.1
-                0.5 2 0.5 0.25
-                0.25 0.5 2 0.5
-                0.1 0.25 0.5 2
-            ]
-        )
+        M = randn(m, n)
+        U = _rand_pdmat(m)
+        V = _rand_pdmat(n)
         dist = MatrixNormal(M, U, V)
-        y = M + 0.1 .* [1.0 -2 3 -1; -1 2 -3 1; 2 -1 1 -2]
+        y = rand(dist)
         mvn_dist = vec(dist)
 
         @testset for (i1, i2) in [
@@ -138,24 +122,17 @@ using Test
     end
 
     @testset "MvLogNormal" begin
-        Σ = [
-            1.0 0.5 0.25
-            0.5 1.0 0.5
-            0.25 0.5 1.0
-        ]
-        dist = MvLogNormal(MvNormal([0.5, 1.0, 1.5], Σ))
-        y = exp.([0.5, 1.0, 1.5])
+        Σ = _rand_spd(3)
+        dist = MvLogNormal(MvNormal(randn(3), Σ))
+        y = rand(dist)
         test_all_index_combos(dist, y)
     end
 
     @testset "GenericMvTDist" begin
-        Σ = [
-            1.0 0.5 0.25
-            0.5 1.0 0.5
-            0.25 0.5 1.0
-        ]
-        dist = MvTDist(5.0, [1.0, 2.0, 3.0], PDMat(Symmetric(Σ)))
-        y = [0.5, 1.5, 2.5]
+        Σ = _rand_spd(3)
+        ν = 4.0 + 8 * rand()
+        dist = MvTDist(ν, randn(3), PDMat(Symmetric(Σ)))
+        y = rand(dist)
         test_all_index_combos(dist, y)
 
         @testset "conditional with multivariate kept indices" begin
@@ -168,20 +145,23 @@ using Test
     # PDiagMat and ScalMat covariances: cover _schur_complement_and_factor(PDiagMat/ScalMat, i)
     # and _pdview(PDiagMat/ScalMat, i) — both Int and non-Int branches.
     @testset "GenericMvTDist (PDiagMat)" begin
-        dist = Distributions.GenericMvTDist(5.0, [1.0, 2.0, 3.0], PDiagMat([1.0, 2.0, 1.5]))
-        y = [0.5, 1.5, 2.5]
+        diag_σ = abs.(randn(3)) .+ 0.15
+        dist = Distributions.GenericMvTDist(4.0 + 6 * rand(), randn(3), PDiagMat(diag_σ))
+        y = rand(dist)
         test_all_index_combos(dist, y)
     end
 
     @testset "GenericMvTDist (ScalMat)" begin
-        dist = Distributions.GenericMvTDist(5.0, [1.0, 2.0, 3.0], ScalMat(3, 2.0))
-        y = [0.5, 1.5, 2.5]
+        dist = Distributions.GenericMvTDist(5.0 + 5 * rand(), randn(3), ScalMat(3, 0.4 + rand()))
+        y = rand(dist)
         test_all_index_combos(dist, y)
     end
 
     if isdefined(Distributions, :ProductDistribution)
         @testset "ProductDistribution{3,0} (three batch axes)" begin
-            dist_3d = Distributions.ProductDistribution(fill(Normal(0, 1), 2, 2, 2))
+            dist_3d = Distributions.ProductDistribution(
+                [Normal(randn(), 0.2 + abs(randn())) for _ in 1:2, _ in 1:2, _ in 1:2],
+            )
             x_3d = rand(dist_3d)
             # insufficient indices:
             @test_throws ArgumentError marginal(dist_3d, 1, 1)
@@ -190,8 +170,8 @@ using Test
 
         @testset "ProductDistribution{1,0} (scalar components)" begin
             # NOTE: currently product_distribution returns a Product, not a ProductDistribution
-            dist = Distributions.ProductDistribution([Normal(k, 1.0) for k in 1:5])
-            y = [0.5, 1.5, 2.5, 3.5, 4.5]
+            dist = Distributions.ProductDistribution([Normal(randn(), 0.3 + abs(randn())) for _ in 1:5])
+            y = rand(dist)
             test_all_index_combos(dist, y)
             # `:` is omitted from `example_vector_indices` here: `marginal(dist, Not(:))` on
             # ProductDistribution hits the linear-index path with an empty selection.
@@ -200,12 +180,12 @@ using Test
         end
 
         @testset "ProductDistribution{2,1} (multivariate components)" begin
-            Σ = [1.0 0.5; 0.5 1.0]
-            comp_dists = [MvNormal(k .+ [0, 0.5], Σ) for k in 1:3]
+            Σ = _rand_spd(5)
+            comp_dists = [MvNormal(randn(5), Σ) for _ in 1:3]
             dist = product_distribution(comp_dists)
-            y = hcat([k .+ [0.1, 0.6] for k in 1:3]...)
+            y = rand(dist)
             # Colon on within-component dim; batch-dim index specs
-            @testset for i2 in [1:2, [1, 3], Not(3), Bool[true, false, true], 1:1]
+            @testset for i2 in [1:2, [1, 4], Not(3), Bool[true, false, true], 1:1]
                 test_logpdf_decomposition(dist, y, (:, i2), (:, Not(i2)))
                 test_logpdf_decomposition(dist, y, (:, Not(i2)), (:, i2))
             end
@@ -223,7 +203,9 @@ using Test
         end
 
         @testset "ProductDistribution{2,0} (batch grid of scalars)" begin
-            grid = Distributions.ProductDistribution(fill(Normal(0, 1), 2, 2))
+            grid = Distributions.ProductDistribution(
+                [Normal(randn(), 0.25 + abs(randn())) for _ in 1:2, _ in 1:2],
+            )
             x_grid = rand(grid)
             m_row = marginal(grid, 1, :)
             @test m_row isa Distributions.AbstractMvNormal
@@ -240,8 +222,8 @@ using Test
 
         if isdefined(Distributions, :Product)
             @testset "Product (scalar components)" begin
-                dist = Distributions.Product([Normal(k, 1.0) for k in 1:5])
-                y = [0.5, 1.5, 2.5, 3.5, 4.5]
+                dist = Distributions.Product([Normal(randn(), 0.3 + abs(randn())) for _ in 1:5])
+                y = rand(dist)
                 test_all_index_combos(dist, y)
                 @test_throws ArgumentError marginal(dist, [1, 1])
             end
@@ -249,12 +231,13 @@ using Test
     end
 
     @testset "MixtureModel (multivariate components)" begin
-        Σ_2 = Matrix{Float64}(I, 2, 2)
+        Σ_a = _rand_spd(5)
+        Σ_b = _rand_spd(5)
         mix_mv = MixtureModel(
-            [MvNormal(zeros(2), Σ_2), MvNormal(ones(2), Σ_2)],
+            [MvNormal(randn(5), Σ_a), MvNormal(randn(5), Σ_b)],
             [0.4, 0.6],
         )
-        y = rand(first(Distributions.components(mix_mv)))
+        y = rand(mix_mv)
         test_all_index_combos(mix_mv, y)
         @test @inferred(marginal(mix_mv, 1)) isa MixtureModel
         @test @inferred(conditional(mix_mv, y, 1)) isa MixtureModel
@@ -263,12 +246,10 @@ using Test
     @testset "MixtureModel (matrix-variate components)" begin
         # Distributions.jl does not implement `logpdf(::MixtureModel{Matrixvariate}, ::AbstractMatrix)`;
         # skip full decomposition/moment sweeps here (see multivariate block above).
-        M_m = [1.0 2 3 4; 5 6 7 8; 9 10 11 12]
-        U_m = PDMat([4.0 1.0 0.5; 1.0 3.0 0.5; 0.5 0.5 2.0])
-        V_m = PDMat([2.0 0.5 0.25 0.1; 0.5 2.0 0.5 0.25; 0.25 0.5 2.0 0.5; 0.1 0.25 0.5 2.0])
-        dist_mn = MatrixNormal(M_m, U_m, V_m)
-        mix_mn = MixtureModel([dist_mn, dist_mn], [0.5, 0.5])
-        y = rand(first(Distributions.components(mix_mn)))
+        dist_a = MatrixNormal(randn(3, 4), _rand_pdmat(3), _rand_pdmat(4))
+        dist_b = MatrixNormal(randn(3, 4), _rand_pdmat(3), _rand_pdmat(4))
+        mix_mn = MixtureModel([dist_a, dist_b], [0.45, 0.55])
+        y = rand(dist_a)
         @test @inferred(marginal(mix_mn, 1:2, 2:3)) isa MixtureModel
         @test @inferred(conditional(mix_mn, y, 1:2, 2:3)) isa MixtureModel
     end
@@ -277,7 +258,7 @@ using Test
         @testset "JointOrderStatistics" begin
             n = 20
             ranks = [3, 7, 11]
-            jos = Distributions.JointOrderStatistics(Normal(0.0, 1.0), 20, [3, 7, 11])
+            jos = Distributions.JointOrderStatistics(Normal(0, 1), 20, [3, 7, 11])
             dmarg = @inferred(marginal(jos, 2))
             @test dmarg isa Distributions.OrderStatistic
             @test dmarg.n == n
