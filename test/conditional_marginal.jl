@@ -185,7 +185,8 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
             dist = product_distribution(comp_dists)
             y = rand(dist)
             # Colon on within-component dim; batch-dim index specs
-            @testset for i2 in [1:2, [4, 3], Not(3), Bool[true, false, true], 1:1]
+            # `i2` indexes the batch axis (length 3), not the within-component axis (length 5).
+            @testset for i2 in [1:2, [3, 2], Not(3), Bool[true, false, true], 1:1]
                 test_logpdf_decomposition(dist, y, (:, i2), (:, Not(i2)))
                 test_logpdf_decomposition(dist, y, (:, Not(i2)), (:, i2))
             end
