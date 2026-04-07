@@ -11,5 +11,6 @@ using JET
         JET.test_package(PartitionedDistributions; target_defined_modules = true)
     end
 
+    include("testutils.jl")
     include("conditional_marginal.jl")
 end
