@@ -168,6 +168,29 @@ function _conditional_impl(dist::Distributions.GenericMvTDist, x::AbstractVector
         return Distributions.GenericMvTDist(ν_cond, μ_cond, Σ_cond)
     end
 end
+function _conditional_impl(dist::Distributions.MixtureModel, x::AbstractArray, i)
+    return _conditional_mixture_impl(dist, x, (i,), (Not(i),))
+end
+function _conditional_impl(dist::Distributions.MixtureModel{Distributions.ArrayLikeVariate{N}}, x::AbstractArray, i1, i2, irest...) where {N}
+    inds = (i1, i2, irest...)
+    length(inds) == N || throw(ArgumentError("Too many indices for array-variate distribution"))
+    inds_lin = @views LinearIndices(x)[inds...]
+    ic = Not(inds_lin)
+    return _conditional_mixture_impl(dist, x, inds, (ic,))
+end
+function _conditional_mixture_impl(dist::Distributions.MixtureModel, x::AbstractArray, i, ic)
+    x_cond = view(x, ic...)
+    components = Distributions.components(dist)
+    weights = LogExpFunctions.softmax(
+        map(components, Distributions.probs(dist)) do d, p
+            return Distributions.logpdf(marginal(d, ic...), x_cond) + log(p)
+        end
+    )
+    return Distributions.MixtureModel(
+        conditional.(components, Ref(x), Ref.(i)...),
+        weights,
+    )
+end
 if isdefined(Distributions, :ProductDistribution)
     function _conditional_impl(
             dist::Distributions.ProductDistribution{N, M},
