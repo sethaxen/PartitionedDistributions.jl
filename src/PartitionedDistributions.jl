@@ -8,6 +8,7 @@ using LinearAlgebra: LinearAlgebra, I
 using LogExpFunctions: LogExpFunctions
 using PDMats: PDMats
 using SpecialFunctions: SpecialFunctions
+using StatsBase: StatsBase
 
 export conditional, marginal
 export pointwise_conditional_logpdfs, pointwise_conditional_logpdfs!!
