@@ -37,7 +37,6 @@ end
 _validate_index(i::Base.Slice) = nothing
 _validate_index(i::Base.LogicalIndex) = nothing
 _validate_index(i::Int) = nothing
-_validate_index(i::Not) = nothing
 function _validate_index(i::Base.AbstractArray)
     allunique(i) || throw(ArgumentError("Indices must be unique"))
     return nothing
