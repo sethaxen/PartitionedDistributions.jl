@@ -6,14 +6,6 @@ using PDMats: PDMat, PDiagMat, ScalMat
 using Random
 using Test
 
-"""Symmetric positive definite `n×n` matrix (dense, typically correlated)."""
-function _rand_spd(n::Int)
-    A = randn(n, n)
-    return Matrix(Symmetric(A * A' + (n + 1) * I))
-end
-
-_rand_pdmat(n::Int) = PDMat(_rand_spd(n))
-
 @testset "conditional-marginal consistency" begin
     @testset "Univariate (ArrayLikeVariate{0})" begin
         dist = Normal(randn(), 0.25 + abs(randn()))
@@ -26,7 +18,7 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
     end
 
     @testset "AbstractMvNormal (MvNormal)" begin
-        Σ = _rand_spd(3)
+        Σ = rand_pdmat(PDMat{Float64}, 3)
         dist = MvNormal(randn(3), Σ)
         y = rand(dist)
         test_all_index_combos(dist, y)
@@ -35,7 +27,7 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
             @test_throws ArgumentError conditional(dist, y, [1, 1])
         end
         @testset "single index argument is Colon" begin
-            Σ_i = _rand_spd(3)
+            Σ_i = rand_pdmat(PDMat{Float64}, 3)
             mvn = MvNormal(randn(3), Σ_i)
             yv = rand(mvn)
             @test marginal(mvn, :) === mvn
@@ -44,7 +36,7 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
     end
 
     @testset "MvNormalCanon" begin
-        J = _rand_spd(3)
+        J = rand_pdmat(PDMat{Float64}, 3)
         μ_c = randn(3)
         dist = MvNormalCanon(μ_c, J)
         y = rand(MvNormal(μ_c, Symmetric(inv(J))))
@@ -53,8 +45,8 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
 
     @testset "MatrixNormal (row/col partition)" begin
         M = randn(3, 4)
-        U = _rand_pdmat(3)
-        V = _rand_pdmat(4)
+        U = rand_pdmat(PDMat{Float64}, 3)
+        V = rand_pdmat(PDMat{Float64}, 4)
         dist = MatrixNormal(M, U, V)
         y = rand(dist)
         row_specs = Any[1:2, [1, 2], Not(3), Bool[true, true, false], 1:1]
@@ -91,8 +83,8 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
         # vec(X) ~ MvNormal(vec(M), kron(V, U)) for X ~ MatrixNormal(M, U, V).
         m, n = 3, 4
         M = randn(m, n)
-        U = _rand_pdmat(m)
-        V = _rand_pdmat(n)
+        U = rand_pdmat(PDMat{Float64}, m)
+        V = rand_pdmat(PDMat{Float64}, n)
         dist = MatrixNormal(M, U, V)
         y = rand(dist)
         mvn_dist = vec(dist)
@@ -122,14 +114,22 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
     end
 
     @testset "MvLogNormal" begin
-        Σ = _rand_spd(3)
+        Σ = rand_pdmat(PDMat{Float64}, 3)
         dist = MvLogNormal(MvNormal(randn(3), Σ))
         y = rand(dist)
         test_all_index_combos(dist, y)
+        # `FullNormal` (`<: MvNormal`) from `conditional(::MvNormal,...)` uses `_mvnormal(::MvNormal)`;
+        # cover `_mvnormal(::AbstractMvNormal)` with a `MvNormalCanon` (not a subtype of `MvNormal`).
+        J = PDiagMat(abs.(randn(2)) .+ 0.5)
+        canon = MvNormalCanon(zeros(2), J)
+        m = PartitionedDistributions._mvnormal(canon)
+        @test m isa MvNormal
+        @test mean(m) ≈ mean(canon)
+        @test cov(m) ≈ Matrix(cov(canon))
     end
 
     @testset "GenericMvTDist" begin
-        Σ = _rand_spd(3)
+        Σ = rand_pdmat(PDMat{Float64}, 3)
         ν = 4.0 + 8 * rand()
         dist = MvTDist(ν, randn(3), PDMat(Symmetric(Σ)))
         y = rand(dist)
@@ -180,7 +180,7 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
         end
 
         @testset "ProductDistribution{2,1} (multivariate components)" begin
-            Σ = _rand_spd(5)
+            Σ = rand_pdmat(PDMat{Float64}, 5)
             comp_dists = [MvNormal(randn(5), Σ) for _ in 1:3]
             dist = product_distribution(comp_dists)
             y = rand(dist)
@@ -199,6 +199,15 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
                 @test logpdf(marg, y[1:1, 2]) ≈ logpdf(marginal(comp_dists[2], 1:1), y[1:1, 2])
             end
             @test_throws ArgumentError marginal(dist, [1, 1])
+            # Scalar linear index + `M > 0`: `CartesianIndex` branch in ProductDistribution
+            # `_marginal_impl` / `_conditional_impl` (not hit for `ProductDistribution{2,0}` where `M == 0`).
+            lin = LinearIndices(axes(dist))[3, 2]
+            @test marginal(dist, lin) isa Normal
+            @test logpdf(marginal(dist, lin), y[lin]) ≈
+                logpdf(marginal(comp_dists[2], 3), y[3, 2])
+            @test conditional(dist, y, lin) isa Normal
+            @test logpdf(conditional(dist, y, lin), y[lin]) ≈
+                logpdf(conditional(comp_dists[2], y[:, 2], 3), y[lin])
             test_trailing_singleton_indices(dist, y)
             test_multidim_linear_index_matrix_consistency(dist, y)
         end
@@ -232,8 +241,8 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
     end
 
     @testset "MixtureModel (multivariate components)" begin
-        Σ_a = _rand_spd(5)
-        Σ_b = _rand_spd(5)
+        Σ_a = rand_pdmat(PDMat{Float64}, 5)
+        Σ_b = rand_pdmat(PDMat{Float64}, 5)
         mix_mv = MixtureModel(
             [MvNormal(randn(5), Σ_a), MvNormal(randn(5), Σ_b)],
             [0.4, 0.6],
@@ -247,8 +256,8 @@ _rand_pdmat(n::Int) = PDMat(_rand_spd(n))
     @testset "MixtureModel (matrix-variate components)" begin
         # Distributions.jl does not implement `logpdf(::MixtureModel{Matrixvariate}, ::AbstractMatrix)`;
         # skip full decomposition/moment sweeps here (see multivariate block above).
-        dist_a = MatrixNormal(randn(3, 4), _rand_pdmat(3), _rand_pdmat(4))
-        dist_b = MatrixNormal(randn(3, 4), _rand_pdmat(3), _rand_pdmat(4))
+        dist_a = MatrixNormal(randn(3, 4), rand_pdmat(PDMat{Float64}, 3), rand_pdmat(PDMat{Float64}, 4))
+        dist_b = MatrixNormal(randn(3, 4), rand_pdmat(PDMat{Float64}, 3), rand_pdmat(PDMat{Float64}, 4))
         mix_mn = MixtureModel([dist_a, dist_b], [0.45, 0.55])
         y = rand(dist_a)
         @test @inferred(marginal(mix_mn, 1:2, 2:3)) isa MixtureModel

@@ -6,9 +6,25 @@
 using Distributions
 using InvertedIndices: Not
 using LinearAlgebra
-using PDMats: ScalMat
+using PDMats: PDMat, PDiagMat, ScalMat
 using PartitionedDistributions
+using Random
 using Test
+
+rand_pdmat(::Type{T}, n::Int) where {T} = rand_pdmat(Random.default_rng(), T, n)
+function rand_pdmat(rng::AbstractRNG, ::Type{Matrix{S}}, n) where {S <: AbstractFloat}
+    return Matrix(rand_pdmat(rng, PDMat{S}, n))
+end
+function rand_pdmat(rng::AbstractRNG, ::Type{<:PDMat{S}}, n) where {S <: AbstractFloat}
+    A = randn(rng, S, n, n)
+    return PDMat(Symmetric(A * A' + cbrt(eps(S)) * I))
+end
+function rand_pdmat(rng::AbstractRNG, ::Type{<:PDiagMat{S}}, n) where {S <: AbstractFloat}
+    return PDiagMat(abs2.(randn(rng, S, n)))
+end
+function rand_pdmat(rng::AbstractRNG, ::Type{<:ScalMat{S}}, n) where {S <: AbstractFloat}
+    return ScalMat(n, randn(rng, S)^2)
+end
 
 """
     complement_linear(x, i) -> Not(...)
