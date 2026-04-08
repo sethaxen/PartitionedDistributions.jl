@@ -15,5 +15,6 @@ Random.seed!(14579)
     end
 
     include("testutils.jl")
+    include("utils.jl")
     include("conditional_marginal.jl")
 end
