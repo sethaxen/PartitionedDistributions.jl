@@ -39,6 +39,11 @@ function complement_linear(x::AbstractArray, i)
     return Not(idxs)
 end
 
+function default_rtol(dist::Distributions.Distribution{<:ArrayLikeVariate}, atol::Real)
+    rtol = cbrt(eps(float(eltype(dist))))
+    return atol > 0 ? zero(rtol) : rtol
+end
+
 """
     test_logpdf_decomposition(dist, x, inds, comp_inds)
 
@@ -47,10 +52,10 @@ Test the chain rule identity:
     logpdf(dist, x) ≈ logpdf(conditional(dist, x, inds...), x[inds...]) +
                       logpdf(marginal(dist, comp_inds...), x[comp_inds...])
 """
-function test_logpdf_decomposition(dist, x, inds, comp_inds)
+function test_logpdf_decomposition(dist, x, inds, comp_inds; atol::Real = 0, rtol::Real = default_rtol(dist, atol))
     cond_dist = conditional(dist, x, inds...)
     marg_dist = marginal(dist, comp_inds...)
-    return @test logpdf(dist, x) ≈ logpdf(cond_dist, x[inds...]) + logpdf(marg_dist, x[comp_inds...])
+    return @test logpdf(dist, x) ≈ logpdf(cond_dist, x[inds...]) + logpdf(marg_dist, x[comp_inds...]) rtol = rtol atol = atol
 end
 
 """
@@ -58,20 +63,27 @@ end
 
 Test that moments of `marginal(dist, inds...)` match slices of the moments of `dist`.
 """
-function test_marginal_moments_match(dist, inds...; test_var::Bool = true, test_cov::Bool = false)
+function test_marginal_moments_match(
+        dist,
+        inds...;
+        test_var::Bool = true,
+        test_cov::Bool = false,
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
     return @testset "Marginal moments match" begin
         marg_dist = marginal(dist, inds...)
         @testset "Mean matches" begin
             mean_dist = mean(dist)
             mean_marg = mean(marg_dist)
-            @test mean_marg ≈ mean_dist[inds...]
+            @test mean_marg ≈ mean_dist[inds...] rtol = rtol atol = atol
         end
         test_var && @testset "Variance matches" begin
-            @test var(marg_dist) ≈ var(dist)[inds...]
+            @test var(marg_dist) ≈ var(dist)[inds...] rtol = rtol atol = atol
         end
         test_cov && @testset "Covariance matches" begin
             lin_inds = vec(LinearIndices(axes(dist))[inds...])
-            @test cov(marg_dist) ≈ cov(dist)[lin_inds, lin_inds]
+            @test cov(marg_dist) ≈ cov(dist)[lin_inds, lin_inds] rtol = rtol atol = atol
         end
     end
 end
@@ -276,23 +288,23 @@ function test_trailing_singleton_indices(dist, y)
 end
 
 """
-    test_axis_aligned_partition_combos(dist, y, axis_specs::NTuple{N, Vector{Any}})
+    test_axis_aligned_partition_combos(dist, y, axis_specs::NTuple{N, Vector{Any}}; kwargs...)
 
 For each dimension `d` and each `id ∈ axis_specs[d]`, test logpdf decomposition with an
 axis-aligned keep / complement partition. Then moment checks on the Cartesian product of
 `axis_specs`, trailing singletons, and multidim linear-index reshape consistency.
 """
-function test_axis_aligned_partition_combos(dist, y, axis_specs::NTuple{N, Vector{Any}}) where {N}
+function test_axis_aligned_partition_combos(dist, y, axis_specs::NTuple{N, Vector{Any}}; kwargs...) where {N}
     @testset for d in 1:N
         @testset for id in axis_specs[d]
             keep = ntuple(k -> k == d ? id : Colon(), N)
             comp = ntuple(k -> k == d ? Not(id) : Colon(), N)
-            test_logpdf_decomposition(dist, y, keep, comp)
-            test_logpdf_decomposition(dist, y, comp, keep)
+            test_logpdf_decomposition(dist, y, keep, comp; kwargs...)
+            test_logpdf_decomposition(dist, y, comp, keep; kwargs...)
         end
     end
     @testset for combo in Iterators.product(axis_specs...)
-        test_marginal_moments_match(dist, combo...; test_cov = true)
+        test_marginal_moments_match(dist, combo...; test_cov = true, kwargs...)
     end
     test_trailing_singleton_indices(dist, y)
     test_multidim_linear_index_matrix_consistency(dist, y)
@@ -300,16 +312,16 @@ function test_axis_aligned_partition_combos(dist, y, axis_specs::NTuple{N, Vecto
 end
 
 """
-    test_all_index_combos(dist, y)
+    test_all_index_combos(dist, y; kwargs...)
 
 For `ArrayLikeVariate{1}`: decomposition + moments for `example_vector_indices`, then trailing
 singletons and (when applicable) a multidim linear-index matrix in the single-index slot.
 """
-function test_all_index_combos(dist, y)
+function test_all_index_combos(dist, y; kwargs...)
     @testset for i in example_vector_indices(dist)
-        test_logpdf_decomposition(dist, y, (i,), (Not(i),))
-        test_logpdf_decomposition(dist, y, (Not(i),), (i,))
-        test_marginal_moments_match(dist, i)
+        test_logpdf_decomposition(dist, y, (i,), (Not(i),); kwargs...)
+        test_logpdf_decomposition(dist, y, (Not(i),), (i,); kwargs...)
+        test_marginal_moments_match(dist, i; kwargs...)
     end
     test_trailing_singleton_indices(dist, y)
     test_multidim_linear_index_matrix_consistency(dist, y)

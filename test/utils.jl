@@ -29,7 +29,7 @@ index_complement(n::Int, i) = setdiff(1:n, i)
 
             @testset "Vector index" begin
                 k = 3
-                i2 = shuffle(collect(1:n))[1:k]
+                i2 = shuffle(1:n)[1:k]
                 ic = index_complement(n, i2)
                 S, B, Σ_ic = @inferred PartitionedDistributions._schur_complement_and_factor(A, i2)
                 @test S ≈ ref_schur_via_inv(A, i2)
