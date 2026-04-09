@@ -64,6 +64,18 @@ function _logpdf_eltype(dist::Distributions.Distribution, y)
     return typeof(log(one(promote_type(eltype(y), Distributions.partype(dist)))))
 end
 
+# inefficient fallback for array-variate distributions
+function pointwise_conditional_logpdfs!!(
+    logp::AbstractArray{<:Number,N},
+    dist::Distributions.Distribution{Distributions.ArrayLikeVariate{N}},
+    x::AbstractArray{<:Number,N},
+) where {N}
+    map!(logp, eachindex(x)) do i
+        return Distributions.logpdf(conditional(dist, x, i), x[i])
+    end
+    return logp
+end
+
 # Array-variate normal distribution
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{<:Number},
