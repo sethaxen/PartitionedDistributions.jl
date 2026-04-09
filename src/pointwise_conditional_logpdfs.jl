@@ -45,13 +45,13 @@ julia> pointwise_conditional_logpdfs(nt_dist, z)
 (x = [-0.47172139161049054, 0.012188177057073202], y = -1.1639385332046728)
 ```
 """
-function pointwise_conditional_logpdfs(dist::Distributions.Distribution, y)
-    logp = _similar_logpdf(dist, y)
-    return pointwise_conditional_logpdfs!!(logp, dist, y)
+function pointwise_conditional_logpdfs(dist::Distributions.Distribution, x)
+    logp = _similar_logpdf(dist, x)
+    return pointwise_conditional_logpdfs!!(logp, dist, x)
 end
 
 """
-    pointwise_conditional_logpdfs!!(logpdfs, dist, y) -> logpdfs
+    pointwise_conditional_logpdfs!!(logpdfs, dist, x) -> logpdfs
 
 Maybe-in-place version of [`pointwise_conditional_logpdfs`](@ref).
 
@@ -60,8 +60,8 @@ is filled in-place and returned. Otherwise, a new collection is returned.
 """
 pointwise_conditional_logpdfs!!
 
-function _logpdf_eltype(dist::Distributions.Distribution, y)
-    return typeof(log(one(promote_type(eltype(y), Distributions.partype(dist)))))
+function _logpdf_eltype(dist::Distributions.Distribution, x)
+    return typeof(log(one(promote_type(eltype(x), Distributions.partype(dist)))))
 end
 
 # inefficient fallback for array-variate distributions
@@ -80,32 +80,32 @@ end
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.MvNormal,
-        y::AbstractVector{<:Number},
+        x::AbstractVector{<:Number},
     )
     (; μ, Σ) = dist
     λ = _pd_diag_inv(Σ)
-    g = Σ \ (y - μ)
+    g = Σ \ (x - μ)
     return @. logp = (log(λ) - g^2 / λ - log2π) / 2
 end
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.MvNormalCanon,
-        y::AbstractVector{<:Number},
+        x::AbstractVector{<:Number},
     )
     (; h, J) = dist
     λ = LinearAlgebra.diag(J)
-    cov_inv_y = _pdmul(J, y)
-    return @. logp = (log(λ) - (cov_inv_y - h)^2 / λ - log2π) / 2
+    cov_inv_x = _pdmul(J, x)
+    return @. logp = (log(λ) - (cov_inv_x - h)^2 / λ - log2π) / 2
 end
 function pointwise_conditional_logpdfs!!(
         logp::AbstractMatrix{<:Number},
         dist::Distributions.MatrixNormal,
-        y::AbstractMatrix{<:Number},
+        x::AbstractMatrix{<:Number},
     )
     (; M, U, V) = dist
     λU = _pd_diag_inv(U)
     λV = _pd_diag_inv(V)
-    g = U \ (y - M) / V
+    g = U \ (x - M) / V
     return @. logp = (log(λU) + log(λV') - g^2 / λU / λV' - log2π) / 2
 end
 
@@ -113,11 +113,11 @@ end
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.MvLogNormal,
-        y::AbstractVector{<:Number},
+        x::AbstractVector{<:Number},
     )
-    logy = log.(y)
-    pointwise_conditional_logpdfs!!(logp, dist.normal, logy)
-    logp .-= logy
+    logx = log.(x)
+    pointwise_conditional_logpdfs!!(logp, dist.normal, logx)
+    logp .-= logx
     return logp
 end
 
@@ -125,7 +125,7 @@ end
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{T},
         dist::Distributions.GenericMvTDist,
-        y::AbstractVector{<:Number},
+        x::AbstractVector{<:Number},
     ) where {T <: Number}
     (; μ, Σ) = dist
     ν = dist.df
@@ -133,7 +133,7 @@ function pointwise_conditional_logpdfs!!(
     α = (νi + 1) / 2
     logc = SpecialFunctions.loggamma(α) - SpecialFunctions.loggamma(νi / 2) - T(logπ) / 2
     λ = _pd_diag_inv(Σ)
-    d = y - μ
+    d = x - μ
     g = Σ \ d
     sqmahal = LinearAlgebra.dot(d, g)
     return map!(logp, λ, g) do λi, gi
@@ -148,35 +148,35 @@ end
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.AbstractMixtureModel{Distributions.Multivariate},
-        y::AbstractVector{<:Number}
+        x::AbstractVector{<:Number}
     )
     logp_k = similar(logp)
     fill!(logp, -Inf)
-    logp_y = first(logp)
+    logp_x = first(logp)
 
     K = Distributions.ncomponents(dist)
     for (k, w_k) in zip(1:K, Distributions.probs(dist))
         dist_k = Distributions.component(dist, k)
-        logp_y_k = log(w_k) + Distributions.logpdf(dist_k, y)
-        logp_y = LogExpFunctions.logaddexp(logp_y, logp_y_k)
-        pointwise_conditional_logpdfs!!(logp_k, dist_k, y)
-        logp .= LogExpFunctions.logaddexp.(logp, logp_y_k .- logp_k)
+        logp_x_k = log(w_k) + Distributions.logpdf(dist_k, x)
+        logp_x = LogExpFunctions.logaddexp(logp_x, logp_x_k)
+        pointwise_conditional_logpdfs!!(logp_k, dist_k, x)
+        logp .= LogExpFunctions.logaddexp.(logp, logp_x_k .- logp_k)
     end
 
-    logp .= logp_y .- logp
+    logp .= logp_x .- logp
 
     return logp
 end
 
 # work around type instability in partype(::AbstractMixtureModel)
 # https://github.com/JuliaStats/Distributions.jl/blob/3d304c26f1cffd6a5bcd24fac2318be92877f4d5/src/mixtures/mixturemodel.jl#L170C41-L170C48
-function _logpdf_eltype(dist::Distributions.AbstractMixtureModel, y::AbstractArray)
+function _logpdf_eltype(dist::Distributions.AbstractMixtureModel, x::AbstractArray)
     prob_type = eltype(Distributions.probs(dist))
     components = Distributions.components(dist)
     component_type = if isconcretetype(eltype(components))  # all components are the same type
-        _logpdf_eltype(first(components), y)
+        _logpdf_eltype(first(components), x)
     else
-        mapreduce(Base.Fix2(_logpdf_eltype, y), promote_type, components)
+        mapreduce(Base.Fix2(_logpdf_eltype, x), promote_type, components)
     end
     return promote_type(component_type, typeof(log(oneunit(prob_type))))
 end
@@ -185,31 +185,31 @@ if isdefined(Distributions, :JointOrderStatistics)
     function pointwise_conditional_logpdfs!!(
             logp::AbstractVector{T},
             dist::Distributions.JointOrderStatistics,
-            y::AbstractVector{<:Number},
+            x::AbstractVector{<:Number},
         ) where {T <: Number}
         (; n, ranks) = dist
-        m = length(y)
+        m = length(x)
 
         if m == 1
-            logp[begin] = Distributions.logpdf(dist, y)
+            logp[begin] = Distributions.logpdf(dist, x)
             return logp
         end
 
-        y_ext = Iterators.flatten((y, last(y)))
+        x_ext = Iterators.flatten((x, last(x)))
         ranks_ext = Iterators.flatten((ranks, n + 1))
 
         udist = dist.dist
-        yi = first(y)
+        xi = first(x)
         ri = si = first(ranks)
         loggi = SpecialFunctions.loggamma(T(si))
-        logdi = Distributions.logcdf(udist, yi)
-        for (i, (yi_plus, ri_plus)) in enumerate(Iterators.drop(zip(y_ext, ranks_ext), 1))
+        logdi = Distributions.logcdf(udist, xi)
+        for (i, (xi_plus, ri_plus)) in enumerate(Iterators.drop(zip(x_ext, ranks_ext), 1))
             si_plus = ri_plus - ri
             si_gap = si + si_plus
             logdi_plus = if i == m
-                Distributions.logccdf(udist, yi_plus)
+                Distributions.logccdf(udist, xi_plus)
             else
-                Distributions.logdiffcdf(udist, yi_plus, yi)
+                Distributions.logdiffcdf(udist, xi_plus, xi)
             end
             logdi_gap = LogExpFunctions.logaddexp(logdi, logdi_plus)
 
@@ -217,7 +217,7 @@ if isdefined(Distributions, :JointOrderStatistics)
             loggi_gap = SpecialFunctions.loggamma(T(si_gap))
             log_beta = loggi + loggi_plus - loggi_gap
 
-            logpi = Distributions.logpdf(udist, yi)
+            logpi = Distributions.logpdf(udist, xi)
 
             # log-pdf is basically a change-of-variables times a ratio of Dirichlets,
             # where all terms cancel except for the ones that change depending on whether
@@ -226,7 +226,7 @@ if isdefined(Distributions, :JointOrderStatistics)
                 logpi + (si - 1) * logdi + (si_plus - 1) * logdi_plus -
                 (si_gap - 1) * logdi_gap - log_beta
 
-            (yi, ri, si, logdi, loggi) = (yi_plus, ri_plus, si_plus, logdi_plus, loggi_plus)
+            (xi, ri, si, logdi, loggi) = (xi_plus, ri_plus, si_plus, logdi_plus, loggi_plus)
         end
         return logp
     end
@@ -237,15 +237,15 @@ if isdefined(Distributions, :ProductDistribution)
     function pointwise_conditional_logpdfs!!(
             logp::AbstractArray{<:Number, N},
             dist::Distributions.ProductDistribution{N, M},
-            y::AbstractArray{<:Number, N},
+            x::AbstractArray{<:Number, N},
         ) where {N, M}
         if M == 0
-            logp .= Distributions.logpdf.(dist.dists, y)
+            logp .= Distributions.logpdf.(dist.dists, x)
         else
             dims = ntuple(i -> i + M, Val(N - M))  # product dimensions
-            for (y_i, logp_i, dist_i) in
-                zip(eachslice(y; dims), eachslice(logp; dims), dist.dists)
-                pointwise_conditional_logpdfs!!(logp_i, dist_i, y_i)
+            for (x_i, logp_i, dist_i) in
+                zip(eachslice(x; dims), eachslice(logp; dims), dist.dists)
+                pointwise_conditional_logpdfs!!(logp_i, dist_i, x_i)
             end
         end
         return logp
@@ -255,55 +255,55 @@ if isdefined(Distributions, :Product)
     function pointwise_conditional_logpdfs!!(
             logp::AbstractVector{<:Number},
             dist::Distributions.Product,
-            y::AbstractVector{<:Number},
+            x::AbstractVector{<:Number},
         )
-        logp .= Distributions.logpdf.(dist.v, y)
+        logp .= Distributions.logpdf.(dist.v, x)
         return logp
     end
     function _similar_logpdf(
-            dist::Distributions.ProductNamedTupleDistribution{K}, y::NamedTuple
+            dist::Distributions.ProductNamedTupleDistribution{K}, x::NamedTuple
         ) where {K}
-        return map(_similar_logpdf, dist.dists, NamedTuple{K}(y))
+        return map(_similar_logpdf, dist.dists, NamedTuple{K}(x))
     end
     function pointwise_conditional_logpdfs(
             dist::Distributions.ProductNamedTupleDistribution{K, V},
-            y::NamedTuple,
+            x::NamedTuple,
         ) where {K, V}
-        _y = NamedTuple{K}(y)
-        logp = _similar_logpdf(dist, _y)
-        return pointwise_conditional_logpdfs!!(logp, dist, _y)
+        _x = NamedTuple{K}(x)
+        logp = _similar_logpdf(dist, _x)
+        return pointwise_conditional_logpdfs!!(logp, dist, _x)
     end
 
     function pointwise_conditional_logpdfs!!(
             logp::NamedTuple,
             dist::Distributions.ProductNamedTupleDistribution,
-            y::NamedTuple,
+            x::NamedTuple,
         )
         dists = dist.dists
         _logp = NamedTuple{keys(logp)}(logp)
-        _y = NamedTuple{keys(y)}(y)
-        return map(dists, _logp, _y) do dist_k, logp_k, y_k
-            return pointwise_conditional_logpdfs!!(logp_k, dist_k, y_k)
+        _x = NamedTuple{keys(x)}(x)
+        return map(dists, _logp, _x) do dist_k, logp_k, x_k
+            return pointwise_conditional_logpdfs!!(logp_k, dist_k, x_k)
         end
     end
 end
 
-function pointwise_conditional_logpdfs!!(logp::AbstractArray{<:Number, 0}, dist::Distributions.UnivariateDistribution, y)
-    logp[] = Distributions.logpdf(dist, y)
+function pointwise_conditional_logpdfs!!(logp::AbstractArray{<:Number, 0}, dist::Distributions.UnivariateDistribution, x)
+    logp[] = Distributions.logpdf(dist, x)
     return logp
 end
-function pointwise_conditional_logpdfs!!(::Number, dist::Distributions.UnivariateDistribution, y)
-    return Distributions.logpdf(dist, y)
+function pointwise_conditional_logpdfs!!(::Number, dist::Distributions.UnivariateDistribution, x)
+    return Distributions.logpdf(dist, x)
 end
 
 function pointwise_conditional_logpdfs!!(
         logp::AbstractArray{<:Number, N},
         dist::Distributions.ReshapedDistribution{N},
-        y::AbstractArray{<:Number, N},
+        x::AbstractArray{<:Number, N},
     ) where {N}
-    y_reshape = reshape(y, size(dist.dist))
+    x_reshape = reshape(y, size(dist.dist))
     logp_reshape = reshape(logp, size(dist.dist))
-    pointwise_conditional_logpdfs!!(logp_reshape, dist.dist, y_reshape)
+    pointwise_conditional_logpdfs!!(logp_reshape, dist.dist, x_reshape)
     return logp
 end
 
@@ -324,11 +324,11 @@ function _pdmul(A::PDMats.AbstractPDMat, b::AbstractVector)
     return y
 end
 
-function _similar_logpdf(dist::Distributions.UnivariateDistribution, y)
-    return zero(_logpdf_eltype(dist, y))
+function _similar_logpdf(dist::Distributions.UnivariateDistribution, x)
+    return zero(_logpdf_eltype(dist, x))
 end
 function _similar_logpdf(
-        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate}, y
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate}, x
     )
-    return similar(y, _logpdf_eltype(dist, y))
+    return similar(x, _logpdf_eltype(dist, x))
 end
