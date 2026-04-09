@@ -79,10 +79,11 @@ end
 # Array-variate normal distribution
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{<:Number},
-        dist::Distributions.MvNormal,
+        dist::Distributions.AbstractMvNormal,
         x::AbstractVector{<:Number},
     )
-    (; μ, Σ) = dist
+    μ = Distributions.mean(dist)
+    Σ = Distributions.cov(dist)
     λ = _pd_diag_inv(Σ)
     g = Σ \ (x - μ)
     return @. logp = (log(λ) - g^2 / λ - log2π) / 2
