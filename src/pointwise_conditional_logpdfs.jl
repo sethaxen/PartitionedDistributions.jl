@@ -10,8 +10,8 @@ only on the corresponding element of `x`.
 Concretely, for a multivariate distribution with PDF ``p(x | θ)`` with indices
 ``i`` and parameters `θ``, this computes ``\\log p(x_i | x_{-i}, θ)`` for all ``i`` in
 `\\text{LinearIndices}(x)`, where ``x_{-i}=`` `x[Not(i)]`. The returned
-collection has the same shape as `x`. For a multivariate distribution, this is
-equivalent to `[logpdf(conditional(dist, x, i), x[Not(i)]) for i in LinearIndices(x)]`
+collection has the same shape as `x`. For array-variate distributions, this is
+equivalent to `logpdf(conditional(dist, x, i), x[i]) for i in LinearIndices(x)]`
 but is generally much more efficient.
 
 See also: [`pointwise_conditional_logpdfs!!`](@ref), [`conditional`](@ref)
