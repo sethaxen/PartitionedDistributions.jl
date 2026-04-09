@@ -302,7 +302,7 @@ function pointwise_conditional_logpdfs!!(
         dist::Distributions.ReshapedDistribution{N},
         x::AbstractArray{<:Number, N},
     ) where {N}
-    x_reshape = reshape(y, size(dist.dist))
+    x_reshape = reshape(x, size(dist.dist))
     logp_reshape = reshape(logp, size(dist.dist))
     pointwise_conditional_logpdfs!!(logp_reshape, dist.dist, x_reshape)
     return logp
