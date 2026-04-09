@@ -66,10 +66,10 @@ end
 
 # inefficient fallback for array-variate distributions
 function pointwise_conditional_logpdfs!!(
-    logp::AbstractArray{<:Number,N},
-    dist::Distributions.Distribution{Distributions.ArrayLikeVariate{N}},
-    x::AbstractArray{<:Number,N},
-) where {N}
+        logp::AbstractArray{<:Number, N},
+        dist::Distributions.Distribution{Distributions.ArrayLikeVariate{N}},
+        x::AbstractArray{<:Number, N},
+    ) where {N}
     map!(logp, eachindex(x)) do i
         return Distributions.logpdf(conditional(dist, x, i), x[i])
     end
