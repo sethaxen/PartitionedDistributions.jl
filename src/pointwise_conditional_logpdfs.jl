@@ -146,10 +146,10 @@ end
 # Mixtures of multivariate distributions
 # NOTE: rand and logpdf for mixture fails on matrix-variate and higher-dimensional distributions
 function pointwise_conditional_logpdfs!!(
-        logp::AbstractVector{<:Number},
-        dist::Distributions.AbstractMixtureModel{Distributions.Multivariate},
-        x::AbstractVector{<:Number}
-    )
+        logp::AbstractArray{<:Number, N},
+        dist::Distributions.AbstractMixtureModel{Distributions.ArrayLikeVariate{N}},
+        x::AbstractArray{<:Number, N}
+    ) where {N}
     logp_k = similar(logp)
     fill!(logp, -Inf)
     logp_x = first(logp)
