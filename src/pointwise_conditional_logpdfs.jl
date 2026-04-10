@@ -262,30 +262,29 @@ if isdefined(Distributions, :Product)
         return logp
     end
     function _similar_logpdf(
-            dist::Distributions.ProductNamedTupleDistribution{K}, x::NamedTuple
+            dist::Distributions.ProductNamedTupleDistribution, x::NamedTuple{K}
         ) where {K}
-        return map(_similar_logpdf, dist.dists, NamedTuple{K}(x))
+        return map(_similar_logpdf, NamedTuple{K}(dist.dists), x)
     end
     function pointwise_conditional_logpdfs(
-            dist::Distributions.ProductNamedTupleDistribution{K, V},
-            x::NamedTuple,
-        ) where {K, V}
-        _x = NamedTuple{K}(x)
-        logp = _similar_logpdf(dist, _x)
-        return pointwise_conditional_logpdfs!!(logp, dist, _x)
-    end
-
-    function pointwise_conditional_logpdfs!!(
-            logp::NamedTuple,
             dist::Distributions.ProductNamedTupleDistribution,
             x::NamedTuple,
         )
-        dists = dist.dists
-        _logp = NamedTuple{keys(logp)}(logp)
-        _x = NamedTuple{keys(x)}(x)
-        return map(dists, _logp, _x) do dist_k, logp_k, x_k
-            return pointwise_conditional_logpdfs!!(logp_k, dist_k, x_k)
-        end
+        logp = _similar_logpdf(dist, x)
+        return pointwise_conditional_logpdfs!!(logp, dist, x)
+    end
+
+    function pointwise_conditional_logpdfs!!(
+            logp::NamedTuple{K},
+            dist::Distributions.ProductNamedTupleDistribution,
+            x::NamedTuple,
+        ) where {K}
+        return map(
+            pointwise_conditional_logpdfs!!,
+            logp,
+            NamedTuple{K}(dist.dists),
+            NamedTuple{K}(x),
+        )
     end
 end
 
