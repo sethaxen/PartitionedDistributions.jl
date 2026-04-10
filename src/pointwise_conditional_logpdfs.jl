@@ -261,6 +261,8 @@ if isdefined(Distributions, :Product)
         logp .= Distributions.logpdf.(dist.v, x)
         return logp
     end
+end
+if isdefined(Distributions, :ProductNamedTupleDistribution)
     function _similar_logpdf(
             dist::Distributions.ProductNamedTupleDistribution, x::NamedTuple{K}
         ) where {K}
