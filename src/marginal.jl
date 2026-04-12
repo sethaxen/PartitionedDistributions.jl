@@ -47,7 +47,7 @@ function marginal(dist::Distributions.Distribution{Distributions.ArrayLikeVariat
         elseif i isa AbstractArray && ndims(i) > 1
             lin_inds = @views LinearIndices(ax)[i]
             dist_marg = _marginal_impl(dist, vec(lin_inds))
-            return reshape(dist_marg, size(i))
+            return _reshape(dist_marg, size(i))
         else
             return _marginal_impl(dist, i)
         end
@@ -63,7 +63,7 @@ function marginal(dist::Distributions.Distribution{Distributions.ArrayLikeVariat
         else
             sz = @views size(LinearIndices(ax)[inds...])
             length(sz) == length(size(dist_marg)) && return dist_marg
-            return reshape(dist_marg, sz)
+            return _reshape(dist_marg, sz)
         end
     else
         throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
@@ -178,7 +178,7 @@ if isdefined(Distributions, :ProductDistribution)
         allequal(n_per_dist) || throw(ArgumentError("Linear indices must select the same number of elements from each factor distribution"))
         allunique(dist_inds) || throw(ArgumentError("Indices for elements of the same factor distribution must be contiguous"))
         n = first(n_per_dist)
-        cart_mat = reshape(cart, n, :)
+        cart_mat = _reshape(cart, n, :)
         marg_dists = map(zip(eachcol(cart_mat), dist_inds)) do (col, dist_ind)
             allunique(col) || throw(ArgumentError("Indices must be unique"))
             factor = dist.dists[dist_ind]

@@ -57,7 +57,7 @@ function conditional(
         elseif i isa AbstractArray && ndims(i) > 1
             lin_inds = @views LinearIndices(ax)[i]
             dist_cond = _conditional_impl(dist, x, vec(lin_inds))
-            return reshape(dist_cond, size(i))
+            return _reshape(dist_cond, size(i))
         else
             return _conditional_impl(dist, x, i)
         end
@@ -73,7 +73,7 @@ function conditional(
         else
             sz = @views size(LinearIndices(ax)[inds...])
             length(sz) == length(size(dist_cond)) && return dist_cond
-            return reshape(dist_cond, sz)
+            return _reshape(dist_cond, sz)
         end
     else
         throw(ArgumentError("Incorrect number of indices for array-variate distribution"))

@@ -85,3 +85,7 @@ function _factorize_indices(cis::AbstractVector{<:CartesianIndex{N}}) where {N}
 
     return (v1, _factorize_indices(rest)...)
 end
+
+# work around Distributions.jl not implementing `length` for `ReshapedDistribution`
+_reshape(dist::Distributions.Distribution, sz::Tuple) = reshape(dist, sz)
+_reshape(dist::Distributions.ReshapedDistribution, sz::Tuple) = reshape(dist.dist, sz)
