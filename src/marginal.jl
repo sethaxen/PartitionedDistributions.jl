@@ -115,6 +115,29 @@ function _marginal_impl(dist::Distributions.GenericMvTDist, i)
         return Distributions.GenericMvTDist(dist.df, μ_i, _pdview(dist.Σ, i))
     end
 end
+function _marginal_impl(dist::Distributions.MatrixTDist, i1, i2)
+    (; ν, M, Σ, Ω) = dist
+    M_i = @views M[i1, i2]
+    if iszero(ndims(M_i))
+        return muladd(sqrt(Σ[i1, i1] * Ω[i2, i2] / ν), Distributions.TDist(ν), M_i[])
+    elseif i1 isa Int
+        return Distributions.MvTDist(ν, vec(M_i), (Σ[i1, i1] / ν) * _pdview(Ω, i2))
+    elseif i2 isa Int
+        return Distributions.MvTDist(ν, vec(M_i), _pdview(Σ, i1) * (Ω[i2, i2] / ν))
+    else
+        return Distributions.MatrixTDist(ν, M_i, _pdview(Σ, i1), _pdview(Ω, i2))
+    end
+end
+function _marginal_impl(dist::Distributions.MatrixTDist, i)
+    cart = CartesianIndices(axes(dist))
+    i isa Int && return _marginal_impl(dist, Tuple(cart[i])...)
+    inds_per_dim = factorize_indices(cart, i)
+    isnothing(inds_per_dim) && throw(ArgumentError("Indices do not factor into per-dimension index vectors"))
+    dist_marg = _marginal_impl(dist, inds_per_dim...)
+    sz = @views size(cart[i])
+    length(sz) == length(size(dist_marg)) && return dist_marg
+    return _reshape(dist_marg, sz)
+end
 function _marginal_impl(dist::Distributions.MixtureModel, i)
     return Distributions.MixtureModel(
         marginal.(Distributions.components(dist), Ref(i)),
