@@ -201,7 +201,7 @@ if isdefined(Distributions, :ProductDistribution)
         allequal(n_per_dist) || throw(ArgumentError("Linear indices must select the same number of elements from each factor distribution"))
         allunique(dist_inds) || throw(ArgumentError("Indices for elements of the same factor distribution must be contiguous"))
         n = first(n_per_dist)
-        cart_mat = _reshape(cart, n, :)
+        cart_mat = reshape(cart, n, :)
         marg_dists = map(zip(eachcol(cart_mat), dist_inds)) do (col, dist_ind)
             allunique(col) || throw(ArgumentError("Indices must be unique"))
             factor = dist.dists[dist_ind]
