@@ -47,7 +47,7 @@ function marginal(dist::Distributions.Distribution{Distributions.ArrayLikeVariat
         elseif i isa AbstractArray && ndims(i) > 1
             lin_inds = @views LinearIndices(ax)[i]
             dist_marg = _marginal_impl(dist, vec(lin_inds))
-            return reshape(dist_marg, size(i))
+            return _reshape(dist_marg, size(i))
         else
             return _marginal_impl(dist, i)
         end
@@ -63,7 +63,7 @@ function marginal(dist::Distributions.Distribution{Distributions.ArrayLikeVariat
         else
             sz = @views size(LinearIndices(ax)[inds...])
             length(sz) == length(size(dist_marg)) && return dist_marg
-            return reshape(dist_marg, sz)
+            return _reshape(dist_marg, sz)
         end
     else
         throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
@@ -114,6 +114,29 @@ function _marginal_impl(dist::Distributions.GenericMvTDist, i)
     else
         return Distributions.GenericMvTDist(dist.df, μ_i, _pdview(dist.Σ, i))
     end
+end
+function _marginal_impl(dist::Distributions.MatrixTDist, i1, i2)
+    (; ν, M, Σ, Ω) = dist
+    M_i = @views M[i1, i2]
+    if iszero(ndims(M_i))
+        return muladd(sqrt(Σ[i1, i1] * Ω[i2, i2] / ν), Distributions.TDist(ν), M_i[])
+    elseif i1 isa Int
+        return Distributions.MvTDist(ν, vec(M_i), (Σ[i1, i1] / ν) * _pdview(Ω, i2))
+    elseif i2 isa Int
+        return Distributions.MvTDist(ν, vec(M_i), _pdview(Σ, i1) * (Ω[i2, i2] / ν))
+    else
+        return Distributions.MatrixTDist(ν, M_i, _pdview(Σ, i1), _pdview(Ω, i2))
+    end
+end
+function _marginal_impl(dist::Distributions.MatrixTDist, i)
+    cart = CartesianIndices(axes(dist))
+    i isa Int && return _marginal_impl(dist, Tuple(cart[i])...)
+    inds_per_dim = factorize_indices(cart, i)
+    isnothing(inds_per_dim) && throw(ArgumentError("Indices do not factor into per-dimension index vectors"))
+    dist_marg = _marginal_impl(dist, inds_per_dim...)
+    sz = @views size(cart[i])
+    length(sz) == length(size(dist_marg)) && return dist_marg
+    return _reshape(dist_marg, sz)
 end
 function _marginal_impl(dist::Distributions.MixtureModel, i)
     return Distributions.MixtureModel(
@@ -199,4 +222,57 @@ if isdefined(Distributions, :Product)
             return Distributions.Product(marginals)
         end
     end
+end
+if isdefined(Distributions, :ProductNamedTupleDistribution)
+    """
+        marginal(dist::ProductNamedTupleDistribution, keep)
+
+    Return the marginal distribution of `dist` at the indices `keep_indices`.
+
+    `keep` may be index into a `NamedTuple` in the support of `dist` or a `NamedTuple`
+    of indices for corresponding factors of `dist`.
+
+    # Examples
+
+    ```jldoctest
+    julia> using Distributions, PartitionedDistributions
+
+    julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
+
+    julia> marginal(d, :y)
+    Normal{Float64}(μ=0.0, σ=1.0)
+
+    julia> marginal(d, (; x=2))
+    ProductNamedTupleDistribution{(:x,)}(
+    x: Normal{Float64}(μ=0.0, σ=1.0)
+    )
+    ```
+    """
+    function marginal(dist::Distributions.ProductNamedTupleDistribution{K}, sel) where {K}
+        return _marginal_impl(dist, sel)
+    end
+
+    @inline function _marginal_impl(
+            dist::Distributions.ProductNamedTupleDistribution, sel,
+        )
+        sub = dist.dists[sel]
+        if sub isa Distributions.Distribution
+            return sub
+        else
+            return Distributions.product_distribution(sub)
+        end
+    end
+    function _marginal_impl(
+            dist::Distributions.ProductNamedTupleDistribution, sel::NamedTuple{K},
+        ) where {K}
+        isempty(sel) && throw(ArgumentError("empty NamedTuple selector"))
+        dists_sub = NamedTuple{K}(dist.dists)
+        dists_marg = map(marginal, dists_sub, sel)
+        return Distributions.product_distribution(dists_marg)
+    end
+end
+function _marginal_impl(dist::Distributions.ReshapedDistribution, inds...)
+    lin_inds = @views LinearIndices(axes(dist))[inds...]
+    dist_marg = marginal(dist.dist, lin_inds)
+    return _reshape(dist_marg, size(lin_inds))
 end
