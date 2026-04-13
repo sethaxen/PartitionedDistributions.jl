@@ -172,7 +172,37 @@ using Test
                     dcond = conditional(dist, y, inds...)
                     dcond_lin = conditional(vec(dist), vec(y), lin_inds)
                     @test dcond isa Distributions.GenericMvTDist
+                    @test logpdf(dcond_lin, vec(y)[lin_inds]) ≈ logpdf(dcond, y[inds...])
                 end
+            end
+        end
+    end
+
+    @testset "ReshapedDistribution" begin
+        @testset for T in (Float64, Float32)
+            M = randn(T, 3, 4)
+            Σ = rand_pdmat(PDMat{T}, 3)
+            Ω = rand_pdmat(PDMat{T}, 4)
+            ν = T(5) + 10 * rand(T)
+            dist = MatrixTDist(ν, M, Σ, Ω)
+            y = rand(dist)
+            # linear indices into the underlying 3×4 data that factor into per-dim selectors
+            col1_inds = vec(LinearIndices(y)[:, 1])  # [1, 2, 3]
+            row1_inds = vec(LinearIndices(y)[1, :])  # [1, 4, 7, 10]
+            @testset for sz in ((12,), (1, 12), (12, 1), (6, 2), (1, 3, 4))
+                rdist = reshape(dist, sz)
+                rdist isa Distributions.ReshapedDistribution || continue
+                ry = reshape(y, sz)
+                test_logpdf_decomposition(rdist, ry, (col1_inds,), (complement_linear(ry, col1_inds),))
+                test_logpdf_decomposition(rdist, ry, (row1_inds,), (complement_linear(ry, row1_inds),))
+                @test logpdf(marginal(rdist, col1_inds), ry[col1_inds]) ≈
+                    logpdf(marginal(dist, :, 1), y[:, 1])
+                @test logpdf(marginal(rdist, row1_inds), ry[row1_inds]) ≈
+                    logpdf(marginal(dist, 1, :), y[1, :])
+                @test logpdf(conditional(rdist, ry, col1_inds), ry[col1_inds]) ≈
+                    logpdf(conditional(dist, y, :, 1), y[:, 1])
+                @test logpdf(conditional(rdist, ry, row1_inds), ry[row1_inds]) ≈
+                    logpdf(conditional(dist, y, 1, :), y[1, :])
             end
         end
     end

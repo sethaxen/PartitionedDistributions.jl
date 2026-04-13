@@ -223,3 +223,8 @@ if isdefined(Distributions, :Product)
         end
     end
 end
+function _marginal_impl(dist::Distributions.ReshapedDistribution, inds...)
+    lin_inds = @views LinearIndices(axes(dist))[inds...]
+    dist_marg = marginal(dist.dist, lin_inds)
+    return _reshape(dist_marg, size(lin_inds))
+end

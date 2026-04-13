@@ -318,3 +318,9 @@ if isdefined(Distributions, :Product)
         return _marginal_impl(dist, i)
     end
 end
+function _conditional_impl(dist::Distributions.ReshapedDistribution, x, inds...)
+    x_reshape = reshape(x, size(dist.dist))
+    lin_inds = @views LinearIndices(x)[inds...]
+    dist_cond = conditional(dist.dist, x_reshape, lin_inds)
+    return _reshape(dist_cond, size(lin_inds))
+end
