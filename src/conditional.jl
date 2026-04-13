@@ -57,7 +57,7 @@ function conditional(
         elseif i isa AbstractArray && ndims(i) > 1
             lin_inds = @views LinearIndices(ax)[i]
             dist_cond = _conditional_impl(dist, x, vec(lin_inds))
-            return reshape(dist_cond, size(i))
+            return _reshape(dist_cond, size(i))
         else
             return _conditional_impl(dist, x, i)
         end
@@ -73,7 +73,7 @@ function conditional(
         else
             sz = @views size(LinearIndices(ax)[inds...])
             length(sz) == length(size(dist_cond)) && return dist_cond
-            return reshape(dist_cond, sz)
+            return _reshape(dist_cond, sz)
         end
     else
         throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
@@ -167,6 +167,66 @@ function _conditional_impl(dist::Distributions.GenericMvTDist, x::AbstractVector
         Σ_cond *= (ν + d) / ν_cond
         return Distributions.GenericMvTDist(ν_cond, μ_cond, Σ_cond)
     end
+end
+function _conditional_impl(dist::Distributions.MatrixTDist, x::AbstractMatrix, i1, i2)
+    if i2 isa Base.Slice
+        return _conditional_impl_row_split(dist, x, i1)
+    elseif i1 isa Base.Slice
+        return _conditional_impl_col_split(dist, x, i2)
+    else
+        x2 = view(x, :, i2)
+        dist_cond_col = _conditional_impl_col_split(dist, x, i2)
+        if length(size(dist_cond_col)) < 2
+            return conditional(dist_cond_col, x2, i1)
+        else
+            return conditional(dist_cond_col, x2, i1, :)
+        end
+    end
+end
+# Gupta & Nagar (2000) "Matrix variate distributions" https://doi.org/10.1201/9780203749289 Theorem 4.3.9(i)
+function _conditional_impl_row_split(dist::Distributions.MatrixTDist, x::AbstractMatrix, i)
+    (; ν, M, Σ, Ω) = dist
+    x_ic = @views x[Not(i), :]
+    M_i = i isa Int ? view(M, i:i, :) : view(M, i, :)
+    M_ic = @views M[Not(i), :]
+    n2 = size(M_ic, 1)
+    ν_cond = ν + n2
+    Σ_cond, B, Σ_ic = _schur_complement_and_factor(Σ, i)
+    dX_ic = x_ic - M_ic
+    M_cond = M_i + B' * dX_ic
+    Ω_cond = Ω + PDMats.Xt_invA_X(Σ_ic, dX_ic)
+    if iszero(ndims(Σ_cond))
+        return Distributions.MvTDist(ν_cond, vec(M_cond), (Σ_cond / ν_cond) * Ω_cond)
+    else
+        return Distributions.MatrixTDist(ν_cond, M_cond, Σ_cond, Ω_cond)
+    end
+end
+# Gupta & Nagar (2000) "Matrix variate distributions" https://doi.org/10.1201/9780203749289 Theorem 4.3.9(ii)
+function _conditional_impl_col_split(dist::Distributions.MatrixTDist, x::AbstractMatrix, i)
+    (; ν, M, Σ, Ω) = dist
+    x_ic = @views x[:, Not(i)]
+    M_i = i isa Int ? view(M, :, i:i) : view(M, :, i)
+    M_ic = @views M[:, Not(i)]
+    p2 = size(M_ic, 2)
+    ν_cond = ν + p2
+    Ω_cond, B, Ω_ic = _schur_complement_and_factor(Ω, i)
+    dX_ic = x_ic - M_ic
+    M_cond = M_i + dX_ic * B
+    Σ_cond = Σ + PDMats.X_invA_Xt(Ω_ic, dX_ic)
+    if iszero(ndims(Ω_cond))
+        return Distributions.MvTDist(ν_cond, vec(M_cond), Σ_cond * (Ω_cond / ν_cond))
+    else
+        return Distributions.MatrixTDist(ν_cond, M_cond, Σ_cond, Ω_cond)
+    end
+end
+function _conditional_impl(dist::Distributions.MatrixTDist, x::AbstractMatrix, i)
+    i isa Int && return _conditional_impl(dist, x, Tuple(CartesianIndices(x)[i])...)
+    inds_per_dim = factorize_indices(x, i)
+    isnothing(inds_per_dim) && throw(ArgumentError("Indices do not factor into per-dimension index vectors"))
+    dist_cond = _conditional_impl(dist, x, inds_per_dim...)
+    sz = @views size(x[i])
+    length(sz) == length(size(dist_cond)) && return dist_cond
+    return _reshape(dist_cond, sz)
 end
 function _conditional_impl(dist::Distributions.MixtureModel, x::AbstractArray, i)
     return _conditional_mixture_impl(dist, x, (i,), (Not(i),))
@@ -312,4 +372,10 @@ if isdefined(Distributions, :ProductNamedTupleDistribution)
         cond_dists = map(conditional, dist_sub, x_sub, sel)
         return Distributions.product_distribution(cond_dists)
     end
+end
+function _conditional_impl(dist::Distributions.ReshapedDistribution, x, inds...)
+    x_reshape = reshape(x, size(dist.dist))
+    lin_inds = @views LinearIndices(x)[inds...]
+    dist_cond = conditional(dist.dist, x_reshape, lin_inds)
+    return _reshape(dist_cond, size(lin_inds))
 end
