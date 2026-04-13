@@ -248,3 +248,8 @@ if isdefined(Distributions, :ProductNamedTupleDistribution)
         return Distributions.product_distribution(dists_marg)
     end
 end
+
+function _marginal_impl(dist::Distributions.ReshapedDistribution, inds...)
+    lin_inds = @views LinearIndices(axes(dist))[inds...]
+    return marginal(dist.dist, lin_inds)
+end
