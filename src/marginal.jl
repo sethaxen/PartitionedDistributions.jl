@@ -200,3 +200,51 @@ if isdefined(Distributions, :Product)
         end
     end
 end
+if isdefined(Distributions, :ProductNamedTupleDistribution)
+    """
+        marginal(dist::ProductNamedTupleDistribution, keep)
+
+    Return the marginal distribution of `dist` at the indices `keep_indices`.
+
+    `keep` may be index into a `NamedTuple` in the support of `dist` or a `NamedTuple`
+    of indices for corresponding factors of `dist`.
+
+    # Examples
+
+    ```jldoctest
+    julia> using Distributions, PartitionedDistributions
+
+    julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
+
+    julia> marginal(d, :y)
+    Normal{Float64}(μ=0.0, σ=1.0)
+
+    julia> marginal(d, (; x=2))
+    ProductNamedTupleDistribution{(:x,)}(
+    x: Normal{Float64}(μ=0.0, σ=1.0)
+    )
+    ```
+    """
+    function marginal(dist::Distributions.ProductNamedTupleDistribution{K}, sel) where {K}
+        return _marginal_impl(dist, sel)
+    end
+
+    @inline function _marginal_impl(
+            dist::Distributions.ProductNamedTupleDistribution, sel,
+        )
+        sub = dist.dists[sel]
+        if sub isa Distributions.Distribution
+            return sub
+        else
+            return Distributions.product_distribution(sub)
+        end
+    end
+    function _marginal_impl(
+            dist::Distributions.ProductNamedTupleDistribution, sel::NamedTuple{K},
+        ) where {K}
+        isempty(sel) && throw(ArgumentError("empty NamedTuple selector"))
+        dists_sub = NamedTuple{K}(dist.dists)
+        dists_marg = map(marginal, dists_sub, sel)
+        return Distributions.product_distribution(dists_marg)
+    end
+end

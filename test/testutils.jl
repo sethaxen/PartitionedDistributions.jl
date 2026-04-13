@@ -44,6 +44,17 @@ function default_rtol(dist::Distributions.Distribution{<:ArrayLikeVariate}, atol
     return atol > 0 ? zero(rtol) : rtol
 end
 
+function default_rtol(dist::Distributions.ProductNamedTupleDistribution, atol::Real)
+    return maximum(Base.Fix2(default_rtol, atol), dist.dists)
+end
+
+_isapprox(a, b; kwargs...) = isapprox(a, b; kwargs...)
+function _isapprox(a::NamedTuple{K}, b::NamedTuple{K}; kwargs...) where {K}
+    return all(zip(a, b)) do (a_i, b_i)
+        return _isapprox(a_i, b_i; kwargs...)
+    end
+end
+
 """
     test_logpdf_decomposition(dist, x, inds, comp_inds)
 
@@ -76,10 +87,10 @@ function test_marginal_moments_match(
         @testset "Mean matches" begin
             mean_dist = mean(dist)
             mean_marg = mean(marg_dist)
-            @test mean_marg ≈ mean_dist[inds...] rtol = rtol atol = atol
+            @test _isapprox(mean_marg, mean_dist[inds...]; rtol = rtol, atol = atol)
         end
         test_var && @testset "Variance matches" begin
-            @test var(marg_dist) ≈ var(dist)[inds...] rtol = rtol atol = atol
+            @test _isapprox(var(marg_dist), var(dist)[inds...]; rtol = rtol, atol = atol)
         end
         test_cov && @testset "Covariance matches" begin
             lin_inds = vec(LinearIndices(axes(dist))[inds...])
