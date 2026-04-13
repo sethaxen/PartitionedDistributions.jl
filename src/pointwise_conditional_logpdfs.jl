@@ -76,6 +76,10 @@ function pointwise_conditional_logpdfs!!(
     return logp
 end
 
+function pointwise_conditional_logpdfs!!(::Number, dist::Distributions.UnivariateDistribution, x::Number)
+    return Distributions.logpdf(dist, x)
+end
+
 # Array-variate normal distribution
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{<:Number},
@@ -290,14 +294,6 @@ if isdefined(Distributions, :ProductNamedTupleDistribution)
     end
 end
 
-function pointwise_conditional_logpdfs!!(logp::AbstractArray{<:Number, 0}, dist::Distributions.UnivariateDistribution, x)
-    logp[] = Distributions.logpdf(dist, x)
-    return logp
-end
-function pointwise_conditional_logpdfs!!(::Number, dist::Distributions.UnivariateDistribution, x)
-    return Distributions.logpdf(dist, x)
-end
-
 function pointwise_conditional_logpdfs!!(
         logp::AbstractArray{<:Number, N},
         dist::Distributions.ReshapedDistribution{N},
@@ -326,7 +322,7 @@ function _pdmul(A::PDMats.AbstractPDMat, b::AbstractVector)
     return y
 end
 
-function _similar_logpdf(dist::Distributions.UnivariateDistribution, x)
+function _similar_logpdf(dist::Distributions.UnivariateDistribution, x::Number)
     return zero(_logpdf_eltype(dist, x))
 end
 function _similar_logpdf(
