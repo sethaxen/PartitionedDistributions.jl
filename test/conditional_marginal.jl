@@ -138,6 +138,75 @@ using Test
         end
     end
 
+    @testset "MatrixTDist (row/col partition)" begin
+        @testset for T in (Float64, Float32), (m, n) in ((3, 4), (2, 5))
+            M = randn(T, m, n)
+            Σ = rand_pdmat(PDMat{T}, m)
+            Ω = rand_pdmat(PDMat{T}, n)
+            ν = 5 + 10 * rand(T)
+            dist = MatrixTDist(ν, M, Σ, Ω)
+            y = rand(dist)
+            axis_specs = default_axis_specs(dist)
+            test_axis_aligned_partition_combos(dist, y, axis_specs)
+            @testset "conditional return type by row/column selector shape" begin
+                AffineTDist{T} = LocationScale{T, Continuous, TDist{T}}
+                n >= 4 || continue
+                @test @inferred(conditional(dist, y, 1, 2)) isa AffineTDist
+                @test @inferred(marginal(dist, 1, 2)) isa AffineTDist
+                @test @inferred(conditional(dist, y, 1, 2:4)) isa Distributions.GenericMvTDist
+                @test @inferred(marginal(dist, 1, 2:4)) isa Distributions.GenericMvTDist
+                m >= 2 || continue
+                @test @inferred(conditional(dist, y, 1:2, 2:4)) isa Distributions.MatrixTDist
+                @test @inferred(marginal(dist, 1:2, 2:4)) isa Distributions.MatrixTDist
+            end
+
+            @testset "selecting one row or column" begin
+                ind_pairs = Tuple{Any, Any}[]
+                n >= 4 && push!(ind_pairs, (1, 2:4))
+                m >= 2 && n >= 3 && push!(ind_pairs, (1:2, 3))
+                isempty(ind_pairs) && continue
+                @testset for inds in ind_pairs
+                    lin_inds = LinearIndices(y)[inds...]
+                    dmarg = marginal(dist, inds...)
+                    @test dmarg isa Distributions.GenericMvTDist
+                    dcond = conditional(dist, y, inds...)
+                    dcond_lin = conditional(vec(dist), vec(y), lin_inds)
+                    @test dcond isa Distributions.GenericMvTDist
+                    @test logpdf(dcond_lin, vec(y)[lin_inds]) ≈ logpdf(dcond, y[inds...])
+                end
+            end
+        end
+    end
+
+    @testset "ReshapedDistribution" begin
+        @testset for T in (Float64, Float32)
+            M = randn(T, 3, 4)
+            Σ = rand_pdmat(PDMat{T}, 3)
+            Ω = rand_pdmat(PDMat{T}, 4)
+            ν = T(5) + 10 * rand(T)
+            dist = MatrixTDist(ν, M, Σ, Ω)
+            y = rand(dist)
+            # linear indices into the underlying 3×4 data that factor into per-dim selectors
+            col1_inds = vec(LinearIndices(y)[:, 1])  # [1, 2, 3]
+            row1_inds = vec(LinearIndices(y)[1, :])  # [1, 4, 7, 10]
+            @testset for sz in ((12,), (1, 12), (12, 1), (6, 2), (1, 3, 4))
+                rdist = reshape(dist, sz)
+                rdist isa Distributions.ReshapedDistribution || continue
+                ry = reshape(y, sz)
+                test_logpdf_decomposition(rdist, ry, (col1_inds,), (complement_linear(ry, col1_inds),))
+                test_logpdf_decomposition(rdist, ry, (row1_inds,), (complement_linear(ry, row1_inds),))
+                @test logpdf(marginal(rdist, col1_inds), ry[col1_inds]) ≈
+                    logpdf(marginal(dist, :, 1), y[:, 1])
+                @test logpdf(marginal(rdist, row1_inds), ry[row1_inds]) ≈
+                    logpdf(marginal(dist, 1, :), y[1, :])
+                @test logpdf(conditional(rdist, ry, col1_inds), ry[col1_inds]) ≈
+                    logpdf(conditional(dist, y, :, 1), y[:, 1])
+                @test logpdf(conditional(rdist, ry, row1_inds), ry[row1_inds]) ≈
+                    logpdf(conditional(dist, y, 1, :), y[1, :])
+            end
+        end
+    end
+
     if isdefined(Distributions, :ProductDistribution)
         @testset "ProductDistribution{3,0} (three batch axes)" begin
             @testset for T in (Float64, Float32)
@@ -285,6 +354,62 @@ using Test
             @test dmarg isa Distributions.JointOrderStatistics
             @test dmarg.n == n
             @test dmarg.ranks == ranks[[1, 3]]
+        end
+    end
+
+    if isdefined(Distributions, :ProductNamedTupleDistribution)
+        @testset "ProductNamedTupleDistribution" begin
+            Σ = [1.0 0.5 0.25; 0.5 1.0 0.5; 0.25 0.5 1.0]
+            d = product_distribution(
+                (
+                    x = MvNormal(zeros(3), Σ),
+                    y = MvNormal([1.0, 2.0], [2.0 0.0; 0.0 3.0]),
+                )
+            )
+            @test marginal(d, :) === d
+            @test marginal(d, 1) === d.dists.x
+            @test marginal(d, :y) === d.dists.y
+            _marginal(d) = @inline marginal(d, (:y, :x))
+            dm = @inferred _marginal(d)
+            @test dm isa Distributions.ProductNamedTupleDistribution
+            @test keys(dm.dists) === (:y, :x)
+            @test dm.dists.y === d.dists.y
+            @test dm.dists.x === d.dists.x
+            dm2 = marginal(d, [:y, :x])
+            @test keys(dm2.dists) === (:y, :x)
+
+            _marginal2(d) = marginal(d, (; x = 1:2, y = 2:2))
+            dsub = @inferred _marginal2(d)
+            @test dsub isa Distributions.ProductNamedTupleDistribution
+            @test keys(dsub.dists) === (:x, :y)
+            @test dsub.dists.x == marginal(d.dists.x, 1:2)
+            @test dsub.dists.y == marginal(d.dists.y, 2:2)
+
+            _marginal3(d) = marginal(d, (; y = 2:2, x = 1:1))
+            dperm = @inferred _marginal3(d)
+            @test keys(dperm.dists) === (:y, :x)
+
+            z = rand(d)
+            test_logpdf_decomposition(d, z, (:x,), (:y,))
+            test_logpdf_decomposition(d, z, (:y,), (:x,))
+            test_marginal_moments_match(d, :x; test_cov = false)
+            test_marginal_moments_match(d, :y; test_cov = false)
+            test_marginal_moments_match(d, (:y, :x); test_cov = false)
+
+            @test conditional(d, z, :x) === d.dists.x
+            @test conditional(d, z, (:y, :x)) == marginal(d, (:y, :x))
+            z_sel = (x = z.x[1:1], y = z.y[2:2])
+            _conditional(d) = conditional(d, z, (; x = 1:1, y = 2:2))
+            dcond = @inferred _conditional(d)
+            @test dcond isa Distributions.ProductNamedTupleDistribution
+            @test logpdf(dcond, z_sel) ≈
+                logpdf(conditional(d.dists.x, z.x, 1:1), z_sel.x) +
+                logpdf(conditional(d.dists.y, z.y, 2:2), z_sel.y)
+
+            @test_throws ArgumentError marginal(d, (;))
+            @test_throws Exception marginal(d, (; z = 1))
+            @test_throws Exception conditional(d, z, (; z = 1))
+            @test_throws DomainError conditional(d, (x = fill(NaN, 3), y = z.y), :x)
         end
     end
 end
