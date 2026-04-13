@@ -313,9 +313,3 @@ if isdefined(Distributions, :ProductNamedTupleDistribution)
         return Distributions.product_distribution(cond_dists)
     end
 end
-
-function _conditional_impl(dist::Distributions.ReshapedDistribution, x, inds...)
-    x_reshape = reshape(x, size(dist.dist))
-    lin_inds = @views reshape(LinearIndices(x_reshape), size(dist.dist))[inds...]
-    return conditional(dist.dist, x_reshape, lin_inds)
-end
