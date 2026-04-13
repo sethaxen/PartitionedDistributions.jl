@@ -83,7 +83,9 @@ function _factorize_indices(cis::AbstractVector{<:CartesianIndex{N}}) where {N}
         rest[b] = CartesianIndex(tailb)
     end
 
-    return (v1, _factorize_indices(rest)...)
+    rest_inds = _factorize_indices(rest)
+    isnothing(rest_inds) && return nothing
+    return (v1, rest_inds...)
 end
 
 # work around Distributions.jl not implementing `length` for `ReshapedDistribution`
