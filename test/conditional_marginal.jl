@@ -356,4 +356,60 @@ using Test
             @test dmarg.ranks == ranks[[1, 3]]
         end
     end
+
+    if isdefined(Distributions, :ProductNamedTupleDistribution)
+        @testset "ProductNamedTupleDistribution" begin
+            Σ = [1.0 0.5 0.25; 0.5 1.0 0.5; 0.25 0.5 1.0]
+            d = product_distribution(
+                (
+                    x = MvNormal(zeros(3), Σ),
+                    y = MvNormal([1.0, 2.0], [2.0 0.0; 0.0 3.0]),
+                )
+            )
+            @test marginal(d, :) === d
+            @test marginal(d, 1) === d.dists.x
+            @test marginal(d, :y) === d.dists.y
+            _marginal(d) = @inline marginal(d, (:y, :x))
+            dm = @inferred _marginal(d)
+            @test dm isa Distributions.ProductNamedTupleDistribution
+            @test keys(dm.dists) === (:y, :x)
+            @test dm.dists.y === d.dists.y
+            @test dm.dists.x === d.dists.x
+            dm2 = marginal(d, [:y, :x])
+            @test keys(dm2.dists) === (:y, :x)
+
+            _marginal2(d) = marginal(d, (; x = 1:2, y = 2:2))
+            dsub = @inferred _marginal2(d)
+            @test dsub isa Distributions.ProductNamedTupleDistribution
+            @test keys(dsub.dists) === (:x, :y)
+            @test dsub.dists.x == marginal(d.dists.x, 1:2)
+            @test dsub.dists.y == marginal(d.dists.y, 2:2)
+
+            _marginal3(d) = marginal(d, (; y = 2:2, x = 1:1))
+            dperm = @inferred _marginal3(d)
+            @test keys(dperm.dists) === (:y, :x)
+
+            z = rand(d)
+            test_logpdf_decomposition(d, z, (:x,), (:y,))
+            test_logpdf_decomposition(d, z, (:y,), (:x,))
+            test_marginal_moments_match(d, :x; test_cov = false)
+            test_marginal_moments_match(d, :y; test_cov = false)
+            test_marginal_moments_match(d, (:y, :x); test_cov = false)
+
+            @test conditional(d, z, :x) === d.dists.x
+            @test conditional(d, z, (:y, :x)) == marginal(d, (:y, :x))
+            z_sel = (x = z.x[1:1], y = z.y[2:2])
+            _conditional(d) = conditional(d, z, (; x = 1:1, y = 2:2))
+            dcond = @inferred _conditional(d)
+            @test dcond isa Distributions.ProductNamedTupleDistribution
+            @test logpdf(dcond, z_sel) ≈
+                logpdf(conditional(d.dists.x, z.x, 1:1), z_sel.x) +
+                logpdf(conditional(d.dists.y, z.y, 2:2), z_sel.y)
+
+            @test_throws ArgumentError marginal(d, (;))
+            @test_throws Exception marginal(d, (; z = 1))
+            @test_throws Exception conditional(d, z, (; z = 1))
+            @test_throws DomainError conditional(d, (x = fill(NaN, 3), y = z.y), :x)
+        end
+    end
 end

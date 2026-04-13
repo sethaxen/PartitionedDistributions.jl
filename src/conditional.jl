@@ -318,6 +318,61 @@ if isdefined(Distributions, :Product)
         return _marginal_impl(dist, i)
     end
 end
+if isdefined(Distributions, :ProductNamedTupleDistribution)
+    """
+        conditional(dist::ProductNamedTupleDistribution, x::NamedTuple, keep)
+
+    Return the conditional distribution at the selector `keep` given observation `x`.
+
+    `keep` may be an index supported by `x[keep]` or a `NamedTuple` of indices for corresponding
+    factors of `dist`.
+
+    # Examples
+
+    ```jldoctest
+    julia> using Distributions, PartitionedDistributions
+
+    julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
+
+    julia> obs = (x=[0.1, 0.2], y=0.3);
+
+    julia> conditional(d, obs, :y) == marginal(d, :y)
+    true
+
+    julia> conditional(d, obs, (; x=2))
+    ProductNamedTupleDistribution{(:x,)}(
+    x: Normal{Float64}(μ=0.05, σ=0.8660254037844386)
+    )
+    ```
+    """
+    function conditional(
+            dist::Distributions.ProductNamedTupleDistribution{K},
+            x::NamedTuple,
+            sel,
+        ) where {K}
+        Distributions.insupport(dist, x) || throw(
+            DomainError(x, "observation is not in the support of the distribution"),
+        )
+        return _conditional_impl(dist, x, sel)
+    end
+
+    function _conditional_impl(
+            dist::Distributions.ProductNamedTupleDistribution, ::NamedTuple, sel,
+        )
+        return marginal(dist, sel)
+    end
+    function _conditional_impl(
+            dist::Distributions.ProductNamedTupleDistribution,
+            x::NamedTuple,
+            sel::NamedTuple{K},
+        ) where {K}
+        isempty(sel) && throw(ArgumentError("empty NamedTuple selector"))
+        dist_sub = NamedTuple{K}(dist.dists)
+        x_sub = NamedTuple{K}(x)
+        cond_dists = map(conditional, dist_sub, x_sub, sel)
+        return Distributions.product_distribution(cond_dists)
+    end
+end
 function _conditional_impl(dist::Distributions.ReshapedDistribution, x, inds...)
     x_reshape = reshape(x, size(dist.dist))
     lin_inds = @views LinearIndices(x)[inds...]
