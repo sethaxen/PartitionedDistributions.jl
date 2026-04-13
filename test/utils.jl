@@ -98,4 +98,41 @@ index_complement(n::Int, i) = setdiff(1:n, i)
         end
         @test_throws ArgumentError PartitionedDistributions._validate_indices(invalid_ids)
     end
+
+    @testset "factorize_indices" begin
+        @testset "vector" begin
+            A = randn(5)
+            inds = shuffle(1:5)[1:3]
+            @test PartitionedDistributions.factorize_indices(A, inds) == (inds,)
+        end
+        @testset "matrix" begin
+            A = randn(5, 4)
+            @test PartitionedDistributions.factorize_indices(A, [1, 3, 5]) == ([1, 3, 5], [1])
+            @test PartitionedDistributions.factorize_indices(A, [5, 3, 1]) == ([5, 3, 1], [1])
+            @test PartitionedDistributions.factorize_indices(A, [1, 6]) == ([1], [1, 2])
+            @test PartitionedDistributions.factorize_indices(A, [1, 3, 5, 6, 8, 10]) == ([1, 3, 5], [1, 2])
+            @test PartitionedDistributions.factorize_indices(A, [6, 8, 10, 1, 3, 5]) == ([1, 3, 5], [2, 1])
+            @test PartitionedDistributions.factorize_indices(A, [1, 3, 6, 5, 8, 10]) === nothing
+            @test PartitionedDistributions.factorize_indices(A, [2, 4, 6]) === nothing
+            inds = LinearIndices(A) .<= 10
+            @test PartitionedDistributions.factorize_indices(A, inds) == ([1, 2, 3, 4, 5], [1, 2])
+            inds = mod.(LinearIndices(A) .+ 3, 5) .> 2
+            @test PartitionedDistributions.factorize_indices(A, inds) == ([1, 5], [1, 2, 3, 4])
+        end
+
+        @testset "3D array" begin
+            A = randn(5, 4, 3)
+            @test PartitionedDistributions.factorize_indices(A, [1, 3, 5]) == ([1, 3, 5], [1], [1])
+            @test PartitionedDistributions.factorize_indices(A, [5, 3, 1]) == ([5, 3, 1], [1], [1])
+            @test PartitionedDistributions.factorize_indices(A, [1, 6]) == ([1], [1, 2], [1])
+            @test PartitionedDistributions.factorize_indices(A, [1, 3, 5, 6, 8, 10]) == ([1, 3, 5], [1, 2], [1])
+            @test PartitionedDistributions.factorize_indices(A, [6, 8, 10, 1, 3, 5]) == ([1, 3, 5], [2, 1], [1])
+            @test PartitionedDistributions.factorize_indices(A, [1, 3, 6, 5, 8, 10]) === nothing
+            @test PartitionedDistributions.factorize_indices(A, [2, 4, 6]) === nothing
+            inds = LinearIndices(A) .<= 10
+            @test PartitionedDistributions.factorize_indices(A, inds) == ([1, 2, 3, 4, 5], [1, 2], [1])
+            inds = mod.(LinearIndices(A) .+ 3, 5) .> 2
+            @test PartitionedDistributions.factorize_indices(A, inds) == ([1, 5], [1, 2, 3, 4], [1, 2, 3])
+        end
+    end
 end
