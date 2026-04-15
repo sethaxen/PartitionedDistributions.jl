@@ -144,7 +144,8 @@ function pointwise_conditional_logpdfs!!(
     return map!(logp, λ, g) do λi, gi
         γ = gi^2 / λi
         β = ν + sqmahal - γ
-        return logc - α * log1p(γ / β) + (log(λi) - log(β)) / 2
+        u = γ / β
+        return logc - α * log1p(u) + (log(λi) - log(β)) / 2
     end
 end
 
