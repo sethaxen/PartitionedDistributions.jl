@@ -1,3 +1,5 @@
+# These methods are adapted from original implementations in the PosteriorStats.jl package.
+
 """
     pointwise_conditional_logpdfs(dist, x) -> logpdfs
 

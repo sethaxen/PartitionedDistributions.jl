@@ -1,7 +1,7 @@
 name = "PartitionedDistributions"
 uuid = "569bd051-8d7b-4221-bcb8-d78512b5866a"
 version = "0.0.1-DEV"
-authors = ["Seth Axen <seth@sethaxen.com> and contributors"]
+authors = ["Seth Axen <seth@sethaxen.com>, Marco Bonici <bonici.marco@gmail.com>, and contributors"]
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
