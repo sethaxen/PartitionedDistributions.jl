@@ -160,7 +160,9 @@ function pointwise_conditional_logpdfs!!(
         pointwise_conditional_logpdfs!!(logp', dist_trans, x')
         return logp
     end
-    νrow = ν + n - 1
+    α = (ν + n + p - 1) / 2
+    logc = SpecialFunctions.loggamma(α) - SpecialFunctions.loggamma(α - 1 // 2) - T(logπ) / 2
+
     D = x - M
     q = _pd_diag_inv(Σ)
     QD = Σ \ D
@@ -168,16 +170,17 @@ function pointwise_conditional_logpdfs!!(
     A = PDMats.PDMat(LinearAlgebra.Symmetric(Ω + D' * QD))
     a = _pd_diag_inv(A)
     B = d / A
-    s = map(LinearAlgebra.dot, eachrow(B), eachrow(d))
-    c = @. q / (1 - q * s)
-    G = (νrow .* c) .* B
-    sqmahal = map(LinearAlgebra.dot, eachrow(G), eachrow(d))
-    λ = νrow .* q .* (a' .+ c .* (B .^ 2))
-    γ = G .^ 2 ./ λ
-    β = νrow .+ sqmahal .- γ
-    α = (νrow + p) / 2
-    logc = SpecialFunctions.loggamma(α) - SpecialFunctions.loggamma(α - 1 // 2) - T(logπ) / 2
-    @. logp = logc - α * log1p(γ / β) + (log(λ) - log(β)) / 2
+
+    foreach(eachrow(logp), q, eachrow(d), eachrow(B)) do logpi, qi, di, Bi
+        si = LinearAlgebra.dot(Bi, di)
+        fi = 1 - qi * si
+        ki = qi / fi
+        w = logc + (log(qi) + log1p(-qi * si)) / 2
+        broadcast!(logpi, a, Bi) do aj, Bij
+            u = (ki / aj) * Bij^2
+            return w + log(aj) / 2 - (α - 1) * log1p(u)
+        end
+    end
     return logp
 end
 
