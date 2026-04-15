@@ -148,6 +148,39 @@ function pointwise_conditional_logpdfs!!(
     end
 end
 
+function pointwise_conditional_logpdfs!!(
+        logp::AbstractMatrix{T},
+        dist::Distributions.MatrixTDist,
+        x::AbstractMatrix{<:Number},
+    ) where {T <: Number}
+    (; ν, M, Σ, Ω) = dist
+    n, p = size(x)
+    if n < p
+        dist_trans = Distributions.MatrixTDist(ν, M', Ω, Σ, dist.logc0)
+        pointwise_conditional_logpdfs!!(logp', dist_trans, x')
+        return logp
+    end
+    νrow = ν + n - 1
+    D = x - M
+    q = _pd_diag_inv(Σ)
+    QD = Σ \ D
+    d = QD ./ q
+    A = PDMats.PDMat(LinearAlgebra.Symmetric(Ω + D' * QD))
+    a = _pd_diag_inv(A)
+    B = d / A
+    s = map(LinearAlgebra.dot, eachrow(B), eachrow(d))
+    c = @. q / (1 - q * s)
+    G = (νrow .* c) .* B
+    sqmahal = map(LinearAlgebra.dot, eachrow(G), eachrow(d))
+    λ = νrow .* q .* (a' .+ c .* (B .^ 2))
+    γ = G .^ 2 ./ λ
+    β = νrow .+ sqmahal .- γ
+    α = (νrow + p) / 2
+    logc = SpecialFunctions.loggamma(α) - SpecialFunctions.loggamma(α - 1 // 2) - T(logπ) / 2
+    @. logp = logc - α * log1p(γ / β) + (log(λ) - log(β)) / 2
+    return logp
+end
+
 # Mixtures of multivariate distributions
 # NOTE: rand and logpdf for mixture fails on matrix-variate and higher-dimensional distributions
 function pointwise_conditional_logpdfs!!(
