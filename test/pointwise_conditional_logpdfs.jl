@@ -7,68 +7,90 @@ using Test
 
 @testset "pointwise_conditional_logpdfs" begin
     @testset "MvNormal" begin
-        @testset for TA in (PDMat, PDiagMat, ScalMat), T in (Float64, Float32), n in (3, 4)
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (3, 4)
+
             Σ = rand_pdmat(TA{T}, n)
             dist = MvNormal(randn(T, n), Σ)
             x = rand(dist)
-            test_pointwise_matches_conditional(dist, x)
+            test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
         end
     end
 
     @testset "MvNormalCanon" begin
-        @testset for TA in (PDMat, PDiagMat, ScalMat), T in (Float64, Float32), n in (3, 4)
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (3, 4)
+
             J = rand_pdmat(TA{T}, n)
             μ_c = randn(T, n)
             dist = MvNormalCanon(μ_c, J)
             x = rand(MvNormal(μ_c, PDMat(Symmetric(inv(Matrix(J))))))
-            test_pointwise_matches_conditional(dist, x)
+            test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
         end
     end
 
     @testset "MatrixNormal" begin
-        @testset for T in (Float64, Float32), (m, n) in ((3, 4), (2, 5))
+        @testset for Ar in (Array, DimArray),
+                T in (Float64, Float32),
+                (m, n) in ((3, 4), (2, 5))
+
             M = randn(T, m, n)
             U = rand_pdmat(PDMat{T}, m)
             V = rand_pdmat(PDMat{T}, n)
             dist = MatrixNormal(M, U, V)
             x = rand(dist)
-            test_pointwise_matches_conditional(dist, x)
+            test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
         end
     end
 
     @testset "MvLogNormal" begin
-        @testset for TA in (PDMat, PDiagMat, ScalMat), T in (Float64, Float32), n in (3, 4)
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (3, 4)
+
             Σ = rand_pdmat(TA{T}, n)
             dist = MvLogNormal(MvNormal(randn(T, n), Σ))
             x = rand(dist)
-            test_pointwise_matches_conditional(dist, x)
+            test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
         end
     end
 
     @testset "GenericMvTDist" begin
-        @testset for T in (Float64, Float32), n in (3, 4)
+        @testset for Ar in (Array, DimArray), T in (Float64, Float32), n in (3, 4)
             Σ = rand_pdmat(PDMat{T}, n)
             ν = 5 + 10 * rand(T)
             dist = MvTDist(ν, randn(T, n), Σ)
             x = rand(dist)
-            test_pointwise_matches_conditional(dist, x)
+            test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
         end
     end
 
     @testset "MatrixTDist" begin
-        @testset for T in (Float64, Float32), (m, n) in ((3, 4), (2, 5))
+        @testset for Ar in (Array, DimArray),
+                T in (Float64, Float32),
+                (m, n) in ((3, 4), (2, 5))
+
             M = randn(T, m, n)
             Σ = rand_pdmat(PDMat{T}, m)
             Ω = rand_pdmat(PDMat{T}, n)
             ν = 5 + 10 * rand(T)
             dist = MatrixTDist(ν, M, Σ, Ω)
             x = rand(dist)
-            test_pointwise_matches_conditional(dist, x)
+            test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
         end
     end
 
     @testset "MixtureModel (multivariate)" begin
-        @testset for TA in (PDMat, PDiagMat, ScalMat), T in (Float64, Float32), n in (4, 5)
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (4, 5)
+
             Σ_a = rand_pdmat(TA{T}, n)
             Σ_b = rand_pdmat(TA{T}, n)
             mix_mv = MixtureModel(
@@ -77,12 +99,16 @@ using Test
             )
             x = rand(mix_mv)
             rtol = T <: Float64 ? 1.0e-6 : 1.0e-4
-            test_pointwise_matches_conditional(mix_mv, x; rtol = rtol)
+            test_pointwise_matches_conditional(mix_mv, wrap_array(Ar, x); rtol = rtol)
         end
     end
 
     @testset "MixtureModel (heterogeneous multivariate component types)" begin
-        @testset for TA in (PDMat, PDiagMat, ScalMat), T in (Float64, Float32), n in (4, 5)
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (4, 5)
+
             Σ_a = rand_pdmat(TA{T}, n)
             Σ_b = rand_pdmat(TA{T}, n)
             ν = 5 + 10 * rand(T)
@@ -92,12 +118,12 @@ using Test
             )
             @test !isconcretetype(eltype(Distributions.components(mix)))
             x = T.(rand(mix))
-            test_pointwise_matches_conditional(mix, x; rtol = cbrt(eps(T)))
+            test_pointwise_matches_conditional(mix, wrap_array(Ar, x); rtol = cbrt(eps(T)))
         end
     end
 
     @testset "ReshapedDistribution" begin
-        @testset for T in (Float64, Float32)
+        @testset for Ar in (Array, DimArray), T in (Float64, Float32)
             m, n = 3, 4
             M = randn(T, m, n)
             U = rand_pdmat(PDMat{T}, m)
@@ -108,24 +134,28 @@ using Test
                 rdist = reshape(dist, sz)
                 rdist isa Distributions.ReshapedDistribution || continue
                 ry = reshape(y, sz)
-                test_pointwise_matches_conditional(rdist, ry)
+                test_pointwise_matches_conditional(rdist, wrap_array(Ar, ry))
             end
         end
     end
 
     if isdefined(Distributions, :ProductDistribution)
         @testset "ProductDistribution (multivariate components)" begin
-            @testset for TA in (PDMat, PDiagMat, ScalMat), T in (Float64, Float32), d in (3, 4)
+            @testset for Ar in (Array, DimArray),
+                    TA in (PDMat, PDiagMat, ScalMat),
+                    T in (Float64, Float32),
+                    d in (3, 4)
+
                 Σ = rand_pdmat(TA{T}, d)
                 comp_dists = [MvNormal(randn(T, d), Σ) for _ in 1:3]
                 dist = product_distribution(comp_dists)
                 x = rand(dist)
-                test_pointwise_matches_conditional(dist, x)
+                test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
             end
         end
 
         @testset "ProductDistribution (scalar components, M == 0)" begin
-            @testset for T in (Float64, Float32), sz in ((5,), (2, 3))
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32), sz in ((5,), (2, 3))
                 ax = map(Base.OneTo, sz)
                 factors = map(Iterators.product(ax...)) do _
                     Normal(randn(T), abs(randn(T)))
@@ -133,19 +163,19 @@ using Test
                 # currently, calling product_distribution might produce a Product
                 dist = Distributions.ProductDistribution(factors)
                 x = rand(dist)
-                test_pointwise_matches_conditional(dist, x)
+                test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
             end
         end
     end
 
     if isdefined(Distributions, :Product)
         @testset "Product (univariate factors)" begin
-            @testset for T in (Float64, Float32)
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32)
                 dist = Distributions.Product(
                     [Normal(randn(T), T(0.3) + abs(randn(T))) for _ in 1:7],
                 )
                 x = rand(dist)
-                test_pointwise_matches_conditional(dist, x)
+                test_pointwise_matches_conditional(dist, wrap_array(Ar, x))
             end
         end
     end
@@ -190,18 +220,21 @@ using Test
 
     if isdefined(Distributions, :JointOrderStatistics)
         @testset "JointOrderStatistics" begin
-            @testset for T in (Float64, Float32),
+            @testset for Ar in (Array, DimArray),
+                    T in (Float64, Float32),
                     udist in [Normal(rand(T)...), Beta(rand(T)...)],
                     n in (10, 20),
                     ranks in (sort(shuffle(1:n)[1:5]), 1:n, [1, n], [n ÷ 2])
 
                 dist = JointOrderStatistics(udist, n, ranks)
                 x = rand(dist)
+                xw = wrap_array(Ar, x)
                 if length(ranks) == 1
-                    logp = pointwise_conditional_logpdfs(dist, x)
-                    @test only(logp) ≈ logpdf(dist, x)
+                    logp = pointwise_conditional_logpdfs(dist, xw)
+                    @test axes(logp) == axes(xw)
+                    @test only(_pointwise_value_array(logp)) ≈ logpdf(dist, xw)
                 else
-                    test_pointwise_matches_marginal(dist, x)
+                    test_pointwise_matches_marginal(dist, xw)
                 end
             end
         end

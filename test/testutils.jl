@@ -1,8 +1,4 @@
-# Indexing test helpers: dimension-agnostic pieces (`default_axis_specs`, `default_base_index_tuple`,
-# `example_multidim_linear_index_matrix`, trailing singletons) plus `ArrayLikeVariate{1}`-specific
-# `example_vector_indices` overloads. For a new `N`-D distribution, prefer
-# `test_axis_aligned_partition_combos(dist, y, default_axis_specs(dist))` when axis-aligned `Not`
-# partitions make sense; otherwise supply custom per-axis vectors of length `N`.
+using DimensionalData
 using Distributions
 using InvertedIndices: Not
 using LinearAlgebra
@@ -10,6 +6,17 @@ using PDMats: PDMat, PDiagMat, ScalMat
 using PartitionedDistributions
 using Random
 using Test
+
+"""
+    wrap_array(T::Type{<:AbstractArray}, x::AbstractArray) -> T
+
+Wrap `x` if necessary to convert to type `T`.
+"""
+wrap_array(::Type{T}, x::AbstractArray) where {T <: AbstractArray} = convert(T, x)
+function wrap_array(::Type{T}, x::AbstractArray) where {T <: DimArray}
+    d = ntuple(i -> (X, Y, Z)[i](axes(x, i)), ndims(x))
+    return T(x, d)
+end
 
 rand_pdmat(::Type{T}, n::Int) where {T} = rand_pdmat(Random.default_rng(), T, n)
 function rand_pdmat(rng::AbstractRNG, ::Type{Matrix{S}}, n) where {S <: AbstractFloat}
@@ -74,6 +81,7 @@ end
 
 For array-variate `dist`, check that `pointwise_conditional_logpdfs` agrees with
 `logpdf(conditional(dist, x, i), x[i])` for each `i in eachindex(x)`.
+Also checks `axes(logp) == axes(x)` so e.g. `DimensionalData.DimArray` inputs preserve dimensions on output.
 For [`ProductNamedTupleDistribution`](@ref), recurse into each factor (independent blocks).
 
 Does not apply to distributions without a working [`conditional`](@ref) (e.g. [`JointOrderStatistics`](@ref)).
