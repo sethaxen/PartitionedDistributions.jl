@@ -16,7 +16,7 @@ For array-variate distributions, this is equivalent to
 ```
 but is generally much more efficient.
 
-See `pointwise_conditional_logpdfs!!` for a maybe-in-place version.
+See [`pointwise_conditional_logpdfs!!`](@ref) for a maybe-in-place version.
 
 See also: [`conditional`](@ref)
 

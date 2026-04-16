@@ -37,6 +37,20 @@ dim: 1
 Σ: [0.75;;]
 )
 ```
+
+For a `ProductNamedTupleDistribution`, we can additionally provide a `NamedTuple` of indices to keep.
+
+
+```jldoctest conditional
+julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
+
+julia> obs = (x=[0.1, 0.2], y=0.3);
+
+julia> conditional(d, obs, (; x=2))
+ProductNamedTupleDistribution{(:x,)}(
+x: Normal{Float64}(μ=0.05, σ=0.8660254037844386)
+)
+```
 """
 conditional
 
@@ -317,32 +331,6 @@ end
     end
 end
 
-"""
-    conditional(dist::ProductNamedTupleDistribution, x::NamedTuple, keep)
-
-Return the conditional distribution at the selector `keep` given observation `x`.
-
-`keep` may be an index supported by `x[keep]` or a `NamedTuple` of indices for corresponding
-factors of `dist`.
-
-# Examples
-
-```jldoctest
-julia> using Distributions, PartitionedDistributions
-
-julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
-
-julia> obs = (x=[0.1, 0.2], y=0.3);
-
-julia> conditional(d, obs, :y) == marginal(d, :y)
-true
-
-julia> conditional(d, obs, (; x=2))
-ProductNamedTupleDistribution{(:x,)}(
-x: Normal{Float64}(μ=0.05, σ=0.8660254037844386)
-)
-```
-"""
 function conditional(
         dist::Distributions.ProductNamedTupleDistribution{K},
         x::NamedTuple,

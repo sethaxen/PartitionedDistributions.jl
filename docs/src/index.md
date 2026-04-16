@@ -4,11 +4,14 @@ CurrentModule = PartitionedDistributions
 
 # PartitionedDistributions
 
-Documentation for [PartitionedDistributions](https://github.com/sethaxen/PartitionedDistributions.jl).
+PartitionedDistributions provides functionality for partitioning [Distributions.jl](https://github.com/JuliaStats/Distributions.jl)'s distributions into *conditional* and *marginal* distributions.
 
 ```@index
 ```
 
-```@autodocs
-Modules = [PartitionedDistributions]
+```@docs
+marginal
+conditional
+pointwise_conditional_logpdfs
+pointwise_conditional_logpdfs!!
 ```

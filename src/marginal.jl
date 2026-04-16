@@ -24,11 +24,22 @@ dim: 2
 Σ: [1.0 0.25; 0.25 1.0]
 )
 
-julia> marginal(dist, Not(2))  # alternatively, specify index to keep
+julia> marginal(dist, Not(2))  # alternatively, specify index to marginalize over
 MvNormal{Float64, PDMats.PDMat{Float64, Matrix{Float64}}, SubArray{Float64, 1, Vector{Float64}, Tuple{Vector{Int64}}, false}}(
 dim: 2
 μ: [1.0, 3.0]
 Σ: [1.0 0.25; 0.25 1.0]
+)
+```
+
+For a `ProductNamedTupleDistribution`, we can additionally provide a `NamedTuple` of indices to keep.
+
+```jldoctest marginal
+julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
+
+julia> marginal(d, (; x=2))
+ProductNamedTupleDistribution{(:x,)}(
+x: Normal{Float64}(μ=0.0, σ=1.0)
 )
 ```
 """
@@ -220,30 +231,6 @@ end
     end
 end
 
-"""
-    marginal(dist::ProductNamedTupleDistribution, keep)
-
-Return the marginal distribution of `dist` at the indices `keep_indices`.
-
-`keep` may be index into a `NamedTuple` in the support of `dist` or a `NamedTuple`
-of indices for corresponding factors of `dist`.
-
-# Examples
-
-```jldoctest
-julia> using Distributions, PartitionedDistributions
-
-julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
-
-julia> marginal(d, :y)
-Normal{Float64}(μ=0.0, σ=1.0)
-
-julia> marginal(d, (; x=2))
-ProductNamedTupleDistribution{(:x,)}(
-x: Normal{Float64}(μ=0.0, σ=1.0)
-)
-```
-"""
 function marginal(dist::Distributions.ProductNamedTupleDistribution{K}, sel) where {K}
     return _marginal_impl(dist, sel)
 end
