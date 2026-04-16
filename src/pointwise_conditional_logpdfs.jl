@@ -85,6 +85,7 @@ function pointwise_conditional_logpdfs!!(::Number, dist::Distributions.Univariat
 end
 
 # Array-variate normal distribution
+# Prop. 1 from Bürkner, PC., et al. Comput Stat 36, 1243–1261 (2021). doi: 10.1007/s00180-020-01045-4
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.AbstractMvNormal,
@@ -130,7 +131,9 @@ function pointwise_conditional_logpdfs!!(
     return logp
 end
 
-# Array-variate t-distribution
+# Multivariate t-distribution
+# Prop. 3 from Bürkner, PC., et al. Comput Stat 36, 1243–1261 (2021). doi: 10.1007/s00180-020-01045-4
+# but uses a more efficient implementation.
 function pointwise_conditional_logpdfs!!(
         logp::AbstractVector{T},
         dist::Distributions.GenericMvTDist,
@@ -153,6 +156,7 @@ function pointwise_conditional_logpdfs!!(
     end
 end
 
+# Matrix-variate t-distribution
 function pointwise_conditional_logpdfs!!(
         logp::AbstractMatrix{T},
         dist::Distributions.MatrixTDist,
@@ -278,7 +282,7 @@ if isdefined(Distributions, :JointOrderStatistics)
     end
 end
 
-# Product of array-variate distributions
+# Product distributions
 if isdefined(Distributions, :ProductDistribution)
     function pointwise_conditional_logpdfs!!(
             logp::AbstractArray{<:Number, N},
@@ -335,6 +339,7 @@ if isdefined(Distributions, :ProductNamedTupleDistribution)
     end
 end
 
+# Reshaped distributions, just delegate to the underlying distribution and reshape
 function pointwise_conditional_logpdfs!!(
         logp::AbstractArray{<:Number, N},
         dist::Distributions.ReshapedDistribution{N},
