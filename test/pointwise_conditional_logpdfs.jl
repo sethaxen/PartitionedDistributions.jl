@@ -232,7 +232,7 @@ using Test
                 if length(ranks) == 1
                     logp = pointwise_conditional_logpdfs(dist, xw)
                     @test axes(logp) == axes(xw)
-                    @test only(_pointwise_value_array(logp)) ≈ logpdf(dist, xw)
+                    @test only(logp) ≈ logpdf(dist, xw)
                 else
                     test_pointwise_matches_marginal(dist, xw)
                 end
