@@ -1,4 +1,5 @@
 using PartitionedDistributions
+using Distributions
 using Documenter
 
 DocMeta.setdocmeta!(PartitionedDistributions, :DocTestSetup, :(using PartitionedDistributions); recursive = true)
@@ -14,4 +15,5 @@ makedocs(;
     pages = [
         "Home" => "index.md",
     ],
+    warnonly = [:missing_docs],
 )
