@@ -1,22 +1,24 @@
 # These methods are adapted from original implementations in the PosteriorStats.jl package.
 
 """
-    pointwise_conditional_logpdfs(dist, x) -> logpdfs
+    pointwise_conditional_logpdfs(dist, x) -> logp
 
-Compute pointwise conditional logpdf of `x` for a given distribution.
+Compute pointwise conditional log-PDF of `x` for a given distribution.
 
 Returns a collection with the same structure as `x` where each scalar is the
 log-PDF of the distribution conditioned on all other elements of `x` and evaluated
 only on the corresponding element of `x`.
 
-Concretely, for a multivariate distribution with PDF ``p(x | θ)`` with indices
-``i`` and parameters `θ``, this computes ``\\log p(x_i | x_{-i}, θ)`` for all ``i`` in
-`\\text{LinearIndices}(x)`, where ``x_{-i}=`` `x[Not(i)]`. The returned
-collection has the same shape as `x`. For array-variate distributions, this is
-equivalent to `logpdf(conditional(dist, x, i), x[i]) for i in LinearIndices(x)]`
+For array-variate distributions, this is equivalent to
+
+```julia
+[logpdf(conditional(dist, x, i), x[i]) for i in LinearIndices(x)]
+```
 but is generally much more efficient.
 
-See also: [`pointwise_conditional_logpdfs!!`](@ref), [`conditional`](@ref)
+See `pointwise_conditional_logpdfs!!` for a maybe-in-place version.
+
+See also: [`conditional`](@ref)
 
 # Examples
 
@@ -31,20 +33,20 @@ julia> x = [2.9, 0.4];
 
 julia> pointwise_conditional_logpdfs(dist, x)
 2-element Vector{Float64}:
- -0.47172139161049054
-  0.012188177057073202
+ -0.4717213916104904
+  0.01218817705707309
 ```
 
-Here's an example with a NamedTuple-variate distribution:
+Here's an example with a `NamedTuple`-variate distribution:
 
 ```jldoctest pointwise_conditional_logpdfs
-julia> nt_dist = product_distribution((x = dist, y = Normal())); # NamedTuple-variate distribution
+julia> nt_dist = product_distribution((x = dist, y = Normal()));
 
 julia> z = (; x, y=0.7)
 (x = [2.9, 0.4], y = 0.7)
 
 julia> pointwise_conditional_logpdfs(nt_dist, z)
-(x = [-0.47172139161049054, 0.012188177057073202], y = -1.1639385332046728)
+(x = [-0.4717213916104904, 0.01218817705707309], y = -1.1639385332046728)
 ```
 """
 function pointwise_conditional_logpdfs(dist::Distributions.Distribution, x)
@@ -53,11 +55,11 @@ function pointwise_conditional_logpdfs(dist::Distributions.Distribution, x)
 end
 
 """
-    pointwise_conditional_logpdfs!!(logpdfs, dist, x) -> logpdfs
+    pointwise_conditional_logpdfs!!(logp, dist, x) -> logpdfs
 
 Maybe-in-place version of [`pointwise_conditional_logpdfs`](@ref).
 
-If all scalar values in `logpdfs` can be mutated, then `logpdfs`
+If all scalar values in `logp` can be mutated, then `logp`
 is filled in-place and returned. Otherwise, a new collection is returned.
 """
 pointwise_conditional_logpdfs!!
