@@ -16,4 +16,6 @@ makedocs(;
         "Home" => "index.md",
     ],
     warnonly = [:missing_docs],
+    # don't require match on trailing digits in floating point numbers
+    doctestfilters = [r"(\d*)\.(\d{4})\d+" => s"\1.\2***"],
 )
