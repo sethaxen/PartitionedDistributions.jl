@@ -33,8 +33,8 @@ julia> x = [2.9, 0.4];
 
 julia> pointwise_conditional_logpdfs(dist, x)
 2-element Vector{Float64}:
- -0.4717213916104904
-  0.01218817705707309
+ -0.47172139161049054
+  0.012188177057073202
 ```
 
 Here's an example with a `NamedTuple`-variate distribution:
@@ -46,7 +46,7 @@ julia> z = (; x, y=0.7)
 (x = [2.9, 0.4], y = 0.7)
 
 julia> pointwise_conditional_logpdfs(nt_dist, z)
-(x = [-0.4717213916104904, 0.01218817705707309], y = -1.1639385332046728)
+(x = [-0.47172139161049054, 0.012188177057073202], y = -1.1639385332046728)
 ```
 """
 function pointwise_conditional_logpdfs(dist::Distributions.Distribution, x)
