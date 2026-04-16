@@ -231,77 +231,73 @@ function _logpdf_eltype(dist::Distributions.AbstractMixtureModel, x::AbstractArr
     return promote_type(component_type, typeof(log(oneunit(prob_type))))
 end
 
-if isdefined(Distributions, :JointOrderStatistics)
-    function pointwise_conditional_logpdfs!!(
-            logp::AbstractVector{T},
-            dist::Distributions.JointOrderStatistics,
-            x::AbstractVector{<:Number},
-        ) where {T <: Number}
-        (; n, ranks) = dist
-        m = length(x)
+function pointwise_conditional_logpdfs!!(
+        logp::AbstractVector{T},
+        dist::Distributions.JointOrderStatistics,
+        x::AbstractVector{<:Number},
+    ) where {T <: Number}
+    (; n, ranks) = dist
+    m = length(x)
 
-        if m == 1
-            logp[begin] = Distributions.logpdf(dist, x)
-            return logp
-        end
-
-        x_ext = Iterators.flatten((x, last(x)))
-        ranks_ext = Iterators.flatten((ranks, n + 1))
-
-        udist = dist.dist
-        xi = first(x)
-        ri = si = first(ranks)
-        loggi = SpecialFunctions.loggamma(T(si))
-        logdi = Distributions.logcdf(udist, xi)
-        for (i, (xi_plus, ri_plus)) in enumerate(Iterators.drop(zip(x_ext, ranks_ext), 1))
-            si_plus = ri_plus - ri
-            si_gap = si + si_plus
-            logdi_plus = if i == m
-                Distributions.logccdf(udist, xi_plus)
-            else
-                Distributions.logdiffcdf(udist, xi_plus, xi)
-            end
-            logdi_gap = LogExpFunctions.logaddexp(logdi, logdi_plus)
-
-            loggi_plus = SpecialFunctions.loggamma(T(si_plus))
-            loggi_gap = SpecialFunctions.loggamma(T(si_gap))
-            log_beta = loggi + loggi_plus - loggi_gap
-
-            logpi = Distributions.logpdf(udist, xi)
-
-            # log-pdf is basically a change-of-variables times a ratio of Dirichlets,
-            # where all terms cancel except for the ones that change depending on whether
-            # ranks[i] is observed or not.
-            logp[i] =
-                logpi + (si - 1) * logdi + (si_plus - 1) * logdi_plus -
-                (si_gap - 1) * logdi_gap - log_beta
-
-            (xi, ri, si, logdi, loggi) = (xi_plus, ri_plus, si_plus, logdi_plus, loggi_plus)
-        end
+    if m == 1
+        logp[begin] = Distributions.logpdf(dist, x)
         return logp
     end
+
+    x_ext = Iterators.flatten((x, last(x)))
+    ranks_ext = Iterators.flatten((ranks, n + 1))
+
+    udist = dist.dist
+    xi = first(x)
+    ri = si = first(ranks)
+    loggi = SpecialFunctions.loggamma(T(si))
+    logdi = Distributions.logcdf(udist, xi)
+    for (i, (xi_plus, ri_plus)) in enumerate(Iterators.drop(zip(x_ext, ranks_ext), 1))
+        si_plus = ri_plus - ri
+        si_gap = si + si_plus
+        logdi_plus = if i == m
+            Distributions.logccdf(udist, xi_plus)
+        else
+            Distributions.logdiffcdf(udist, xi_plus, xi)
+        end
+        logdi_gap = LogExpFunctions.logaddexp(logdi, logdi_plus)
+
+        loggi_plus = SpecialFunctions.loggamma(T(si_plus))
+        loggi_gap = SpecialFunctions.loggamma(T(si_gap))
+        log_beta = loggi + loggi_plus - loggi_gap
+
+        logpi = Distributions.logpdf(udist, xi)
+
+        # log-pdf is basically a change-of-variables times a ratio of Dirichlets,
+        # where all terms cancel except for the ones that change depending on whether
+        # ranks[i] is observed or not.
+        logp[i] =
+            logpi + (si - 1) * logdi + (si_plus - 1) * logdi_plus -
+            (si_gap - 1) * logdi_gap - log_beta
+
+        (xi, ri, si, logdi, loggi) = (xi_plus, ri_plus, si_plus, logdi_plus, loggi_plus)
+    end
+    return logp
 end
 
 # Product distributions
-if isdefined(Distributions, :ProductDistribution)
-    function pointwise_conditional_logpdfs!!(
-            logp::AbstractArray{<:Number, N},
-            dist::Distributions.ProductDistribution{N, M},
-            x::AbstractArray{<:Number, N},
-        ) where {N, M}
-        if M == 0
-            logp .= Distributions.logpdf.(dist.dists, x)
-        else
-            dims = ntuple(i -> i + M, Val(N - M))  # product dimensions
-            for (x_i, logp_i, dist_i) in
-                zip(eachslice(x; dims), eachslice(logp; dims), dist.dists)
-                pointwise_conditional_logpdfs!!(logp_i, dist_i, x_i)
-            end
+function pointwise_conditional_logpdfs!!(
+        logp::AbstractArray{<:Number, N},
+        dist::Distributions.ProductDistribution{N, M},
+        x::AbstractArray{<:Number, N},
+    ) where {N, M}
+    if M == 0
+        logp .= Distributions.logpdf.(dist.dists, x)
+    else
+        dims = ntuple(i -> i + M, Val(N - M))  # product dimensions
+        for (x_i, logp_i, dist_i) in
+            zip(eachslice(x; dims), eachslice(logp; dims), dist.dists)
+            pointwise_conditional_logpdfs!!(logp_i, dist_i, x_i)
         end
-        return logp
     end
+    return logp
 end
-if isdefined(Distributions, :Product)
+@static if isdefined(Distributions, :Product)
     function pointwise_conditional_logpdfs!!(
             logp::AbstractVector{<:Number},
             dist::Distributions.Product,
@@ -311,32 +307,30 @@ if isdefined(Distributions, :Product)
         return logp
     end
 end
-if isdefined(Distributions, :ProductNamedTupleDistribution)
-    function _similar_logpdf(
-            dist::Distributions.ProductNamedTupleDistribution, x::NamedTuple{K}
-        ) where {K}
-        return map(_similar_logpdf, NamedTuple{K}(dist.dists), x)
-    end
-    function pointwise_conditional_logpdfs(
-            dist::Distributions.ProductNamedTupleDistribution,
-            x::NamedTuple,
-        )
-        logp = _similar_logpdf(dist, x)
-        return pointwise_conditional_logpdfs!!(logp, dist, x)
-    end
+function _similar_logpdf(
+        dist::Distributions.ProductNamedTupleDistribution, x::NamedTuple{K}
+    ) where {K}
+    return map(_similar_logpdf, NamedTuple{K}(dist.dists), x)
+end
+function pointwise_conditional_logpdfs(
+        dist::Distributions.ProductNamedTupleDistribution,
+        x::NamedTuple,
+    )
+    logp = _similar_logpdf(dist, x)
+    return pointwise_conditional_logpdfs!!(logp, dist, x)
+end
 
-    function pointwise_conditional_logpdfs!!(
-            logp::NamedTuple{K},
-            dist::Distributions.ProductNamedTupleDistribution,
-            x::NamedTuple,
-        ) where {K}
-        return map(
-            pointwise_conditional_logpdfs!!,
-            logp,
-            NamedTuple{K}(dist.dists),
-            NamedTuple{K}(x),
-        )
-    end
+function pointwise_conditional_logpdfs!!(
+        logp::NamedTuple{K},
+        dist::Distributions.ProductNamedTupleDistribution,
+        x::NamedTuple,
+    ) where {K}
+    return map(
+        pointwise_conditional_logpdfs!!,
+        logp,
+        NamedTuple{K}(dist.dists),
+        NamedTuple{K}(x),
+    )
 end
 
 # Reshaped distributions, just delegate to the underlying distribution and reshape

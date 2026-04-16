@@ -152,68 +152,64 @@ function _marginal_impl(dist::Distributions.MixtureModel{Distributions.ArrayLike
         Distributions.probs(dist),
     )
 end
-if isdefined(Distributions, :JointOrderStatistics)
-    function _marginal_impl(dist::Distributions.JointOrderStatistics, i)
-        ranks = view(dist.ranks, i)
-        if iszero(ndims(ranks))
-            return Distributions.OrderStatistic(dist.dist, dist.n, ranks[])
-        else
-            return Distributions.JointOrderStatistics(dist.dist, dist.n, ranks)
-        end
+function _marginal_impl(dist::Distributions.JointOrderStatistics, i)
+    ranks = view(dist.ranks, i)
+    if iszero(ndims(ranks))
+        return Distributions.OrderStatistic(dist.dist, dist.n, ranks[])
+    else
+        return Distributions.JointOrderStatistics(dist.dist, dist.n, ranks)
     end
 end
-if isdefined(Distributions, :ProductDistribution)
-    function _marginal_impl(
-            dist::Distributions.ProductDistribution{N, M},
-            i1, i2, irest...,
-        ) where {N, M}
-        inds = (i1, i2, irest...)
-        length(inds) == N || throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
-        ind_in_component = inds[1:M]
-        ind_component = inds[(M + 1):N]
-        selection = @views dist.dists[ind_component...]
-        if selection isa Distributions.Distribution
-            M == 0 && return selection
-            # recurse into within-component marginal
-            return marginal(selection, ind_in_component...)
-        elseif M == 0
-            return Distributions.product_distribution(selection)
-        else
-            marg_dists = map(d -> marginal(d, ind_in_component...), selection)
-            return Distributions.product_distribution(marg_dists)
-        end
-    end
-    function _marginal_impl(
-            dist::Distributions.ProductDistribution{N, M},
-            lin_i,
-        ) where {N, M}
-        ax = axes(dist)
-        cart = @views CartesianIndices(ax)[lin_i]
-        if cart isa CartesianIndex
-            dist_i = Tuple(cart)[(M + 1):N]
-            factor = dist.dists[dist_i...]
-            M == 0 && return factor
-            within_dist_i = Tuple(cart)[1:M]
-            return marginal(factor, within_dist_i...)
-        end
-        isempty(cart) && throw(ArgumentError("At least one element must be selected."))
-        dist_inds, n_per_dist = StatsBase.rle([CartesianIndex(Tuple(c)[(M + 1):N]) for c in cart])
-        allequal(n_per_dist) || throw(ArgumentError("Linear indices must select the same number of elements from each factor distribution"))
-        allunique(dist_inds) || throw(ArgumentError("Indices for elements of the same factor distribution must be contiguous"))
-        n = first(n_per_dist)
-        cart_mat = reshape(cart, n, :)
-        marg_dists = map(zip(eachcol(cart_mat), dist_inds)) do (col, dist_ind)
-            allunique(col) || throw(ArgumentError("Indices must be unique"))
-            factor = dist.dists[dist_ind]
-            M == 0 && return factor
-            lin_inds_i = LinearIndices(axes(factor))
-            within_dist_i = map(c -> lin_inds_i[CartesianIndex(Tuple(c)[1:M])], col)
-            return marginal(factor, within_dist_i)
-        end
+function _marginal_impl(
+        dist::Distributions.ProductDistribution{N, M},
+        i1, i2, irest...,
+    ) where {N, M}
+    inds = (i1, i2, irest...)
+    length(inds) == N || throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
+    ind_in_component = inds[1:M]
+    ind_component = inds[(M + 1):N]
+    selection = @views dist.dists[ind_component...]
+    if selection isa Distributions.Distribution
+        M == 0 && return selection
+        # recurse into within-component marginal
+        return marginal(selection, ind_in_component...)
+    elseif M == 0
+        return Distributions.product_distribution(selection)
+    else
+        marg_dists = map(d -> marginal(d, ind_in_component...), selection)
         return Distributions.product_distribution(marg_dists)
     end
 end
-if isdefined(Distributions, :Product)
+function _marginal_impl(
+        dist::Distributions.ProductDistribution{N, M},
+        lin_i,
+    ) where {N, M}
+    ax = axes(dist)
+    cart = @views CartesianIndices(ax)[lin_i]
+    if cart isa CartesianIndex
+        dist_i = Tuple(cart)[(M + 1):N]
+        factor = dist.dists[dist_i...]
+        M == 0 && return factor
+        within_dist_i = Tuple(cart)[1:M]
+        return marginal(factor, within_dist_i...)
+    end
+    isempty(cart) && throw(ArgumentError("At least one element must be selected."))
+    dist_inds, n_per_dist = StatsBase.rle([CartesianIndex(Tuple(c)[(M + 1):N]) for c in cart])
+    allequal(n_per_dist) || throw(ArgumentError("Linear indices must select the same number of elements from each factor distribution"))
+    allunique(dist_inds) || throw(ArgumentError("Indices for elements of the same factor distribution must be contiguous"))
+    n = first(n_per_dist)
+    cart_mat = reshape(cart, n, :)
+    marg_dists = map(zip(eachcol(cart_mat), dist_inds)) do (col, dist_ind)
+        allunique(col) || throw(ArgumentError("Indices must be unique"))
+        factor = dist.dists[dist_ind]
+        M == 0 && return factor
+        lin_inds_i = LinearIndices(axes(factor))
+        within_dist_i = map(c -> lin_inds_i[CartesianIndex(Tuple(c)[1:M])], col)
+        return marginal(factor, within_dist_i)
+    end
+    return Distributions.product_distribution(marg_dists)
+end
+@static if isdefined(Distributions, :Product)
     function _marginal_impl(dist::Distributions.Product, i)
         marginals = @views dist.v[i]
         if marginals isa Distributions.Distribution
@@ -223,54 +219,53 @@ if isdefined(Distributions, :Product)
         end
     end
 end
-if isdefined(Distributions, :ProductNamedTupleDistribution)
-    """
-        marginal(dist::ProductNamedTupleDistribution, keep)
 
-    Return the marginal distribution of `dist` at the indices `keep_indices`.
+"""
+    marginal(dist::ProductNamedTupleDistribution, keep)
 
-    `keep` may be index into a `NamedTuple` in the support of `dist` or a `NamedTuple`
-    of indices for corresponding factors of `dist`.
+Return the marginal distribution of `dist` at the indices `keep_indices`.
 
-    # Examples
+`keep` may be index into a `NamedTuple` in the support of `dist` or a `NamedTuple`
+of indices for corresponding factors of `dist`.
 
-    ```jldoctest
-    julia> using Distributions, PartitionedDistributions
+# Examples
 
-    julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
+```jldoctest
+julia> using Distributions, PartitionedDistributions
 
-    julia> marginal(d, :y)
-    Normal{Float64}(μ=0.0, σ=1.0)
+julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
 
-    julia> marginal(d, (; x=2))
-    ProductNamedTupleDistribution{(:x,)}(
-    x: Normal{Float64}(μ=0.0, σ=1.0)
+julia> marginal(d, :y)
+Normal{Float64}(μ=0.0, σ=1.0)
+
+julia> marginal(d, (; x=2))
+ProductNamedTupleDistribution{(:x,)}(
+x: Normal{Float64}(μ=0.0, σ=1.0)
+)
+```
+"""
+function marginal(dist::Distributions.ProductNamedTupleDistribution{K}, sel) where {K}
+    return _marginal_impl(dist, sel)
+end
+@inline function _marginal_impl(
+        dist::Distributions.ProductNamedTupleDistribution, sel,
     )
-    ```
-    """
-    function marginal(dist::Distributions.ProductNamedTupleDistribution{K}, sel) where {K}
-        return _marginal_impl(dist, sel)
-    end
-
-    @inline function _marginal_impl(
-            dist::Distributions.ProductNamedTupleDistribution, sel,
-        )
-        sub = dist.dists[sel]
-        if sub isa Distributions.Distribution
-            return sub
-        else
-            return Distributions.product_distribution(sub)
-        end
-    end
-    function _marginal_impl(
-            dist::Distributions.ProductNamedTupleDistribution, sel::NamedTuple{K},
-        ) where {K}
-        isempty(sel) && throw(ArgumentError("empty NamedTuple selector"))
-        dists_sub = NamedTuple{K}(dist.dists)
-        dists_marg = map(marginal, dists_sub, sel)
-        return Distributions.product_distribution(dists_marg)
+    sub = dist.dists[sel]
+    if sub isa Distributions.Distribution
+        return sub
+    else
+        return Distributions.product_distribution(sub)
     end
 end
+function _marginal_impl(
+        dist::Distributions.ProductNamedTupleDistribution, sel::NamedTuple{K},
+    ) where {K}
+    isempty(sel) && throw(ArgumentError("empty NamedTuple selector"))
+    dists_sub = NamedTuple{K}(dist.dists)
+    dists_marg = map(marginal, dists_sub, sel)
+    return Distributions.product_distribution(dists_marg)
+end
+
 function _marginal_impl(dist::Distributions.ReshapedDistribution, inds...)
     lin_inds = @views LinearIndices(axes(dist))[inds...]
     dist_marg = marginal(dist.dist, lin_inds)

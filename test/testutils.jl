@@ -50,11 +50,8 @@ function default_rtol(dist::Distributions.Distribution{<:ArrayLikeVariate}, atol
     rtol = cbrt(eps(float(eltype(dist))))
     return atol > 0 ? zero(rtol) : rtol
 end
-
-if isdefined(Distributions, :ProductNamedTupleDistribution)
-    function default_rtol(dist::Distributions.ProductNamedTupleDistribution, atol::Real)
-        return maximum(Base.Fix2(default_rtol, atol), dist.dists)
-    end
+function default_rtol(dist::Distributions.ProductNamedTupleDistribution, atol::Real)
+    return maximum(Base.Fix2(default_rtol, atol), dist.dists)
 end
 
 _isapprox(a, b; kwargs...) = isapprox(a, b; kwargs...)
@@ -215,11 +212,9 @@ Single-index-argument examples (linear / logical / `:` along the sole axis) for
 function example_vector_indices(dist::Distributions.Distribution{Distributions.ArrayLikeVariate{1}})
     return _default_example_vector_indices(first(axes(dist)))
 end
-if isdefined(Distributions, :ProductDistribution)
-    function example_vector_indices(dist::Distributions.ProductDistribution{1, 0})
-        ax = first(axes(dist))
-        return length(ax) == 5 ? _example_vector_indices_productdistribution_scalar_len5(ax) : _default_example_vector_indices(ax)
-    end
+function example_vector_indices(dist::Distributions.ProductDistribution{1, 0})
+    ax = first(axes(dist))
+    return length(ax) == 5 ? _example_vector_indices_productdistribution_scalar_len5(ax) : _default_example_vector_indices(ax)
 end
 function example_vector_indices(dist::Distributions.Product)
     ax = first(axes(dist))
