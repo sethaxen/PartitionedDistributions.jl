@@ -5,7 +5,7 @@ DocMeta.setdocmeta!(PartitionedDistributions, :DocTestSetup, :(using Partitioned
 
 makedocs(;
     modules = [PartitionedDistributions],
-    authors = "Seth Axen <seth@sethaxen.com> and contributors",
+    authors = "Seth Axen <seth@sethaxen.com>, Marco Bonici <bonici.marco@gmail.com>, and contributors",
     sitename = "PartitionedDistributions.jl",
     format = Documenter.HTML(;
         edit_link = "main",

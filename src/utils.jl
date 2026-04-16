@@ -90,4 +90,14 @@ end
 
 # work around Distributions.jl not implementing `length` for `ReshapedDistribution`
 _reshape(dist::Distributions.Distribution, sz::Tuple) = reshape(dist, sz)
-_reshape(dist::Distributions.ReshapedDistribution, sz::Tuple) = reshape(dist.dist, sz)
+_reshape(dist::Distributions.UnivariateDistribution, ::Tuple{}) = dist
+_reshape(dist::Distributions.ReshapedDistribution, sz::Tuple) = _reshape(dist.dist, sz)
+function _reshape(  # resolve ambiguity
+        dist::Distributions.ReshapedDistribution{0, S, D},
+        ::Tuple{},
+    ) where {
+        S <: Distributions.ValueSupport,
+        D <: Distributions.Distribution{<:Distributions.ArrayLikeVariate, S},
+    }
+    return _reshape(dist.dist, ())
+end

@@ -205,7 +205,7 @@ end
 function _conditional_impl_col_split(dist::Distributions.MatrixTDist, x::AbstractMatrix, i)
     (; ν, M, Σ, Ω) = dist
     x_ic = @views x[:, Not(i)]
-    M_i = i isa Int ? view(M, :, i:i) : view(M, :, i)
+    M_i = view(M, :, i)
     M_ic = @views M[:, Not(i)]
     p2 = size(M_ic, 2)
     ν_cond = ν + p2

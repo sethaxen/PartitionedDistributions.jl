@@ -1,8 +1,4 @@
-# Indexing test helpers: dimension-agnostic pieces (`default_axis_specs`, `default_base_index_tuple`,
-# `example_multidim_linear_index_matrix`, trailing singletons) plus `ArrayLikeVariate{1}`-specific
-# `example_vector_indices` overloads. For a new `N`-D distribution, prefer
-# `test_axis_aligned_partition_combos(dist, y, default_axis_specs(dist))` when axis-aligned `Not`
-# partitions make sense; otherwise supply custom per-axis vectors of length `N`.
+using DimensionalData
 using Distributions
 using InvertedIndices: Not
 using LinearAlgebra
@@ -10,6 +6,17 @@ using PDMats: PDMat, PDiagMat, ScalMat
 using PartitionedDistributions
 using Random
 using Test
+
+"""
+    wrap_array(T::Type{<:AbstractArray}, x::AbstractArray) -> T
+
+Wrap `x` if necessary to convert to type `T`.
+"""
+wrap_array(::Type{T}, x::AbstractArray) where {T <: AbstractArray} = convert(T, x)
+function wrap_array(::Type{T}, x::AbstractArray) where {T <: DimArray}
+    d = ntuple(i -> (X, Y, Z)[i](axes(x, i)), ndims(x))
+    return T(x, d)
+end
 
 rand_pdmat(::Type{T}, n::Int) where {T} = rand_pdmat(Random.default_rng(), T, n)
 function rand_pdmat(rng::AbstractRNG, ::Type{Matrix{S}}, n) where {S <: AbstractFloat}
@@ -68,6 +75,57 @@ function test_logpdf_decomposition(dist, x, inds, comp_inds; atol::Real = 0, rto
     marg_dist = marginal(dist, comp_inds...)
     return @test logpdf(dist, x) ≈ logpdf(cond_dist, x[inds...]) + logpdf(marg_dist, x[comp_inds...]) rtol = rtol atol = atol
 end
+
+"""
+    test_pointwise_matches_conditional(dist, x; atol, rtol)
+
+For array-variate `dist`, check that `pointwise_conditional_logpdfs` agrees with
+`logpdf(conditional(dist, x, i), x[i])` for each `i in eachindex(x)`.
+Also checks `axes(logp) == axes(x)` so e.g. `DimensionalData.DimArray` inputs preserve dimensions on output.
+For [`ProductNamedTupleDistribution`](@ref), recurse into each factor (independent blocks).
+
+Does not apply to distributions without a working [`conditional`](@ref) (e.g. [`JointOrderStatistics`](@ref)).
+"""
+function test_pointwise_matches_conditional(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        x::AbstractArray{<:Number};
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_conditional_logpdfs(dist, x)
+    @test axes(logp) == axes(x)
+    logp_ref = [logpdf(conditional(dist, x, i), x[i]) for i in LinearIndices(x)]
+    @test logp ≈ logp_ref rtol = rtol atol = atol
+    return nothing
+end
+
+function test_pointwise_matches_conditional(
+        dist::Distributions.Distribution{<:Distributions.Univariate},
+        x::Number;
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_conditional_logpdfs(dist, x)
+    @test logp ≈ logpdf(dist, fill(x)) rtol = rtol atol = atol
+    @test pointwise_conditional_logpdfs!!(oftype(x, NaN), dist, x) == logp
+    return nothing
+end
+
+# for distributions without a working `conditional`
+function test_pointwise_matches_marginal(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        x::AbstractArray{<:Number};
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_conditional_logpdfs(dist, x)
+    @test axes(logp) == axes(x)
+    lp = logpdf(dist, x)
+    logp_ref = [lp - logpdf(marginal(dist, Not(i)), x[Not(i)]) for i in LinearIndices(x)]
+    @test logp ≈ logp_ref rtol = rtol atol = atol
+    return nothing
+end
+
 
 """
     test_marginal_moments_match(dist, inds...; test_var::Bool=true, test_cov::Bool=false)
