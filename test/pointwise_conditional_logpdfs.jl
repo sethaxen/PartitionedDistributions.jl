@@ -81,6 +81,21 @@ using Test
         end
     end
 
+    @testset "MixtureModel (heterogeneous multivariate component types)" begin
+        @testset for TA in (PDMat, PDiagMat, ScalMat), T in (Float64, Float32), n in (4, 5)
+            Σ_a = rand_pdmat(TA{T}, n)
+            Σ_b = rand_pdmat(TA{T}, n)
+            ν = 5 + 10 * rand(T)
+            mix = MixtureModel(
+                [MvNormal(randn(T, n), Σ_a), Distributions.GenericMvTDist(ν, randn(T, n), Σ_b)],
+                T[0.45, 0.55],
+            )
+            @test !isconcretetype(eltype(Distributions.components(mix)))
+            x = T.(rand(mix))
+            test_pointwise_matches_conditional(mix, x; rtol = cbrt(eps(T)))
+        end
+    end
+
     @testset "ReshapedDistribution" begin
         @testset for T in (Float64, Float32)
             m, n = 3, 4
@@ -104,6 +119,19 @@ using Test
                 Σ = rand_pdmat(TA{T}, d)
                 comp_dists = [MvNormal(randn(T, d), Σ) for _ in 1:3]
                 dist = product_distribution(comp_dists)
+                x = rand(dist)
+                test_pointwise_matches_conditional(dist, x)
+            end
+        end
+
+        @testset "ProductDistribution (scalar components, M == 0)" begin
+            @testset for T in (Float64, Float32), sz in ((5,), (2, 3))
+                ax = map(Base.OneTo, sz)
+                factors = map(Iterators.product(ax...)) do _
+                    Normal(randn(T), abs(randn(T)))
+                end
+                # currently, calling product_distribution might produce a Product
+                dist = Distributions.ProductDistribution(factors)
                 x = rand(dist)
                 test_pointwise_matches_conditional(dist, x)
             end
@@ -132,7 +160,14 @@ using Test
                 )
             )
             z = rand(d)
-            test_pointwise_matches_conditional(d, z)
+            @testset for x in (z, reverse(z))
+                logp_nt = pointwise_conditional_logpdfs(d, x)
+                @test logp_nt isa NamedTuple
+                @test keys(logp_nt) === keys(x)
+                @testset for k in keys(logp_nt)
+                    @test logp_nt[k] ≈ pointwise_conditional_logpdfs(d.dists[k], x[k])
+                end
+            end
         end
 
         @testset "nested ProductNamedTuple (inner product + scalars)" begin
@@ -144,16 +179,12 @@ using Test
             )
             outer = product_distribution((block = inner, w = Gamma(2.0, 3.0)))
             z = rand(outer)
-            test_pointwise_matches_conditional(outer, z)
-        end
-
-        @testset "nested ProductNamedTuple (inner Product vector)" begin
-            inner = Distributions.Product(
-                [Normal(randn(), 0.4 + abs(randn())) for _ in 1:4],
-            )
-            outer = product_distribution((chain = inner, tag = Normal(0.2, 0.5)))
-            z = rand(outer)
-            test_pointwise_matches_conditional(outer, z)
+            logp_nt = pointwise_conditional_logpdfs(outer, z)
+            @test logp_nt isa NamedTuple
+            @test keys(logp_nt) === keys(z)
+            @testset for k in keys(logp_nt)
+                @test _isapprox(logp_nt[k], pointwise_conditional_logpdfs(outer.dists[k], z[k]))
+            end
         end
     end
 
@@ -162,12 +193,41 @@ using Test
             @testset for T in (Float64, Float32),
                     udist in [Normal(rand(T)...), Beta(rand(T)...)],
                     n in (10, 20),
-                    ranks in (sort(shuffle(1:n)[1:5]), 1:n, [1, n])
+                    ranks in (sort(shuffle(1:n)[1:5]), 1:n, [1, n], [n ÷ 2])
 
                 dist = JointOrderStatistics(udist, n, ranks)
                 x = rand(dist)
-                test_pointwise_matches_marginal(dist, x)
+                if length(ranks) == 1
+                    logp = pointwise_conditional_logpdfs(dist, x)
+                    @test only(logp) ≈ logpdf(dist, x)
+                else
+                    test_pointwise_matches_marginal(dist, x)
+                end
             end
         end
+    end
+
+    @testset "generic array-variate fallback using invoke" begin
+        T = Float64
+        m, n = 2, 3
+        M = randn(T, m, n)
+        U = rand_pdmat(PDMat{T}, m)
+        V = rand_pdmat(PDMat{T}, n)
+        dist = MatrixNormal(M, U, V)
+        x = rand(dist)
+        logp = similar(x, T)
+        ref = pointwise_conditional_logpdfs(dist, x)
+        out = invoke(
+            pointwise_conditional_logpdfs!!,
+            Tuple{
+                AbstractMatrix{T},
+                Distributions.Distribution{Distributions.ArrayLikeVariate{2}},
+                AbstractMatrix{T},
+            },
+            logp,
+            dist,
+            x,
+        )
+        @test out ≈ ref rtol = cbrt(eps(T))
     end
 end

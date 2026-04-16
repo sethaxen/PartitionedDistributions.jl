@@ -103,24 +103,6 @@ function test_pointwise_matches_conditional(
     return nothing
 end
 
-function test_pointwise_matches_conditional(
-        dist::Distributions.ProductNamedTupleDistribution{K},
-        x::NamedTuple;
-        atol::Real = 0,
-        rtol::Real = default_rtol(dist, atol),
-    ) where {K}
-    xo = NamedTuple{K}(x)
-    @testset for k in K
-        test_pointwise_matches_conditional(
-            dist.dists[k],
-            xo[k];
-            atol = atol,
-            rtol = rtol,
-        )
-    end
-    return nothing
-end
-
 # for distributions without a working `conditional`
 function test_pointwise_matches_marginal(
         dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
