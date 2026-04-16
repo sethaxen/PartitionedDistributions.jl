@@ -70,6 +70,74 @@ function test_logpdf_decomposition(dist, x, inds, comp_inds; atol::Real = 0, rto
 end
 
 """
+    test_pointwise_matches_conditional(dist, x; atol, rtol)
+
+For array-variate `dist`, check that `pointwise_conditional_logpdfs` agrees with
+`logpdf(conditional(dist, x, i), x[i])` for each `i in eachindex(x)`.
+For [`ProductNamedTupleDistribution`](@ref), recurse into each factor (independent blocks).
+
+Does not apply to distributions without a working [`conditional`](@ref) (e.g. [`JointOrderStatistics`](@ref)).
+"""
+function test_pointwise_matches_conditional(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        x::AbstractArray{<:Number};
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_conditional_logpdfs(dist, x)
+    @test axes(logp) == axes(x)
+    logp_ref = [logpdf(conditional(dist, x, i), x[i]) for i in LinearIndices(x)]
+    @test logp ≈ logp_ref rtol = rtol atol = atol
+    return nothing
+end
+
+function test_pointwise_matches_conditional(
+        dist::Distributions.Distribution{<:Distributions.Univariate},
+        x::Number;
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_conditional_logpdfs(dist, x)
+    @test logp ≈ logpdf(dist, fill(x)) rtol = rtol atol = atol
+    @test pointwise_conditional_logpdfs!!(oftype(x, NaN), dist, x) == logp
+    return nothing
+end
+
+function test_pointwise_matches_conditional(
+        dist::Distributions.ProductNamedTupleDistribution{K},
+        x::NamedTuple;
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    ) where {K}
+    xo = NamedTuple{K}(x)
+    @testset for k in K
+        test_pointwise_matches_conditional(
+            dist.dists[k],
+            xo[k];
+            atol = atol,
+            rtol = rtol,
+        )
+    end
+    return nothing
+end
+
+# for distributions without a working `conditional`
+function test_pointwise_matches_marginal(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        x::AbstractArray{<:Number};
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_conditional_logpdfs(dist, x)
+    @test axes(logp) == axes(x)
+    lp = logpdf(dist, x)
+    logp_ref = [lp - logpdf(marginal(dist, Not(i)), x[Not(i)]) for i in LinearIndices(x)]
+    @test logp ≈ logp_ref rtol = rtol atol = atol
+    return nothing
+end
+
+
+"""
     test_marginal_moments_match(dist, inds...; test_var::Bool=true, test_cov::Bool=false)
 
 Test that moments of `marginal(dist, inds...)` match slices of the moments of `dist`.
