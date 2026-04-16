@@ -1,4 +1,5 @@
 using PartitionedDistributions
+using Distributions
 using Documenter
 
 DocMeta.setdocmeta!(PartitionedDistributions, :DocTestSetup, :(using PartitionedDistributions); recursive = true)
@@ -14,4 +15,7 @@ makedocs(;
     pages = [
         "Home" => "index.md",
     ],
+    warnonly = [:missing_docs],
+    # don't require match on trailing digits in floating point numbers
+    doctestfilters = [r"(\d*)\.(\d{4})\d+" => s"\1.\2***"],
 )

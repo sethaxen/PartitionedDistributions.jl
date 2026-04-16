@@ -37,6 +37,20 @@ dim: 1
 Σ: [0.75;;]
 )
 ```
+
+For a `ProductNamedTupleDistribution`, we can additionally provide a `NamedTuple` of indices to keep.
+
+
+```jldoctest conditional
+julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
+
+julia> obs = (x=[0.1, 0.2], y=0.3);
+
+julia> conditional(d, obs, (; x=2))
+ProductNamedTupleDistribution{(:x,)}(
+x: Normal{Float64}(μ=0.05, σ=0.8660254037844386)
+)
+```
 """
 conditional
 
@@ -251,128 +265,100 @@ function _conditional_mixture_impl(dist::Distributions.MixtureModel, x::Abstract
         weights,
     )
 end
-if isdefined(Distributions, :ProductDistribution)
-    function _conditional_impl(
-            dist::Distributions.ProductDistribution{N, M},
-            x::AbstractArray{<:Real, N},
-            i1, i2, irest...,
-        ) where {N, M}
-        inds = (i1, i2, irest...)
-        length(inds) == N || throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
-        ind_in_component = inds[1:M]
-        ind_component = inds[(M + 1):N]
-        selected_dists = view(dist.dists, ind_component...)
-        if iszero(ndims(selected_dists))
-            selected_dist = selected_dists[]
-            M == 0 && return selected_dist
-            x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., ind_component...)
-            return conditional(selected_dist, x_comp, ind_in_component...)
-        elseif M == 0
-            # Scalar components are independent: conditioning on other components has no effect
-            return Distributions.product_distribution(selected_dists)
-        else
-            x_selected = view(x, ntuple(_ -> Colon(), Val(M))..., ind_component...)
-            batch_dims = ntuple(k -> M + k, ndims(selected_dists))
-            cond_dists = map(
-                (d, x_d) -> conditional(d, x_d, ind_in_component...),
-                selected_dists,
-                eachslice(x_selected; dims = batch_dims),
-            )
-            return Distributions.product_distribution(cond_dists)
-        end
-    end
-    function _conditional_impl(
-            dist::Distributions.ProductDistribution{N, M},
-            x::AbstractArray{<:Real, N},
-            lin_i,
-        ) where {N, M}
-        ax = axes(dist)
-        cart = @views CartesianIndices(ax)[lin_i]
-        if cart isa CartesianIndex
-            dist_i = Tuple(cart)[(M + 1):N]
-            factor = dist.dists[dist_i...]
-            M == 0 && return factor
-            x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., dist_i...)
-            within_dist_i = Tuple(cart)[1:M]
-            return conditional(factor, x_comp, within_dist_i...)
-        end
-        isempty(cart) && throw(ArgumentError("At least one element must be selected."))
-        dist_inds, n_per_dist = StatsBase.rle([CartesianIndex(Tuple(c)[(M + 1):N]) for c in cart])
-        allequal(n_per_dist) || throw(ArgumentError("Linear indices must select the same number of elements from each factor distribution"))
-        allunique(dist_inds) || throw(ArgumentError("Indices for elements of the same factor distribution must be contiguous"))
-        n = first(n_per_dist)
-        cart_mat = reshape(cart, n, :)
-        cond_dists = map(zip(eachcol(cart_mat), dist_inds)) do (col, dist_ind)
-            factor = dist.dists[dist_ind]
-            M == 0 && return factor
-            x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., dist_ind)
-            lin_inds_i = LinearIndices(axes(factor))
-            within_dist_i = map(c -> lin_inds_i[CartesianIndex(Tuple(c)[1:M])], col)
-            return conditional(factor, x_comp, within_dist_i)
-        end
+function _conditional_impl(
+        dist::Distributions.ProductDistribution{N, M},
+        x::AbstractArray{<:Real, N},
+        i1, i2, irest...,
+    ) where {N, M}
+    inds = (i1, i2, irest...)
+    length(inds) == N || throw(ArgumentError("Incorrect number of indices for array-variate distribution"))
+    ind_in_component = inds[1:M]
+    ind_component = inds[(M + 1):N]
+    selected_dists = view(dist.dists, ind_component...)
+    if iszero(ndims(selected_dists))
+        selected_dist = selected_dists[]
+        M == 0 && return selected_dist
+        x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., ind_component...)
+        return conditional(selected_dist, x_comp, ind_in_component...)
+    elseif M == 0
+        # Scalar components are independent: conditioning on other components has no effect
+        return Distributions.product_distribution(selected_dists)
+    else
+        x_selected = view(x, ntuple(_ -> Colon(), Val(M))..., ind_component...)
+        batch_dims = ntuple(k -> M + k, ndims(selected_dists))
+        cond_dists = map(
+            (d, x_d) -> conditional(d, x_d, ind_in_component...),
+            selected_dists,
+            eachslice(x_selected; dims = batch_dims),
+        )
         return Distributions.product_distribution(cond_dists)
     end
 end
-if isdefined(Distributions, :Product)
+function _conditional_impl(
+        dist::Distributions.ProductDistribution{N, M},
+        x::AbstractArray{<:Real, N},
+        lin_i,
+    ) where {N, M}
+    ax = axes(dist)
+    cart = @views CartesianIndices(ax)[lin_i]
+    if cart isa CartesianIndex
+        dist_i = Tuple(cart)[(M + 1):N]
+        factor = dist.dists[dist_i...]
+        M == 0 && return factor
+        x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., dist_i...)
+        within_dist_i = Tuple(cart)[1:M]
+        return conditional(factor, x_comp, within_dist_i...)
+    end
+    isempty(cart) && throw(ArgumentError("At least one element must be selected."))
+    dist_inds, n_per_dist = StatsBase.rle([CartesianIndex(Tuple(c)[(M + 1):N]) for c in cart])
+    allequal(n_per_dist) || throw(ArgumentError("Linear indices must select the same number of elements from each factor distribution"))
+    allunique(dist_inds) || throw(ArgumentError("Indices for elements of the same factor distribution must be contiguous"))
+    n = first(n_per_dist)
+    cart_mat = reshape(cart, n, :)
+    cond_dists = map(zip(eachcol(cart_mat), dist_inds)) do (col, dist_ind)
+        factor = dist.dists[dist_ind]
+        M == 0 && return factor
+        x_comp = view(x, ntuple(_ -> Colon(), Val(M))..., dist_ind)
+        lin_inds_i = LinearIndices(axes(factor))
+        within_dist_i = map(c -> lin_inds_i[CartesianIndex(Tuple(c)[1:M])], col)
+        return conditional(factor, x_comp, within_dist_i)
+    end
+    return Distributions.product_distribution(cond_dists)
+end
+@static if isdefined(Distributions, :Product)
     function _conditional_impl(dist::Distributions.Product, ::AbstractVector, i)
         return _marginal_impl(dist, i)
     end
 end
-if isdefined(Distributions, :ProductNamedTupleDistribution)
-    """
-        conditional(dist::ProductNamedTupleDistribution, x::NamedTuple, keep)
 
-    Return the conditional distribution at the selector `keep` given observation `x`.
-
-    `keep` may be an index supported by `x[keep]` or a `NamedTuple` of indices for corresponding
-    factors of `dist`.
-
-    # Examples
-
-    ```jldoctest
-    julia> using Distributions, PartitionedDistributions
-
-    julia> d = product_distribution((x=MvNormal([0.0, 0.0], [1.0 0.5; 0.5 1.0]), y=Normal()));
-
-    julia> obs = (x=[0.1, 0.2], y=0.3);
-
-    julia> conditional(d, obs, :y) == marginal(d, :y)
-    true
-
-    julia> conditional(d, obs, (; x=2))
-    ProductNamedTupleDistribution{(:x,)}(
-    x: Normal{Float64}(μ=0.05, σ=0.8660254037844386)
+function conditional(
+        dist::Distributions.ProductNamedTupleDistribution{K},
+        x::NamedTuple,
+        sel,
+    ) where {K}
+    Distributions.insupport(dist, x) || throw(
+        DomainError(x, "observation is not in the support of the distribution"),
     )
-    ```
-    """
-    function conditional(
-            dist::Distributions.ProductNamedTupleDistribution{K},
-            x::NamedTuple,
-            sel,
-        ) where {K}
-        Distributions.insupport(dist, x) || throw(
-            DomainError(x, "observation is not in the support of the distribution"),
-        )
-        return _conditional_impl(dist, x, sel)
-    end
-
-    function _conditional_impl(
-            dist::Distributions.ProductNamedTupleDistribution, ::NamedTuple, sel,
-        )
-        return marginal(dist, sel)
-    end
-    function _conditional_impl(
-            dist::Distributions.ProductNamedTupleDistribution,
-            x::NamedTuple,
-            sel::NamedTuple{K},
-        ) where {K}
-        isempty(sel) && throw(ArgumentError("empty NamedTuple selector"))
-        dist_sub = NamedTuple{K}(dist.dists)
-        x_sub = NamedTuple{K}(x)
-        cond_dists = map(conditional, dist_sub, x_sub, sel)
-        return Distributions.product_distribution(cond_dists)
-    end
+    return _conditional_impl(dist, x, sel)
 end
+
+function _conditional_impl(
+        dist::Distributions.ProductNamedTupleDistribution, ::NamedTuple, sel,
+    )
+    return marginal(dist, sel)
+end
+function _conditional_impl(
+        dist::Distributions.ProductNamedTupleDistribution,
+        x::NamedTuple,
+        sel::NamedTuple{K},
+    ) where {K}
+    isempty(sel) && throw(ArgumentError("empty NamedTuple selector"))
+    dist_sub = NamedTuple{K}(dist.dists)
+    x_sub = NamedTuple{K}(x)
+    cond_dists = map(conditional, dist_sub, x_sub, sel)
+    return Distributions.product_distribution(cond_dists)
+end
+
 function _conditional_impl(dist::Distributions.ReshapedDistribution, x, inds...)
     x_reshape = reshape(x, size(dist.dist))
     lin_inds = @views LinearIndices(x)[inds...]

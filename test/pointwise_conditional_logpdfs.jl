@@ -139,7 +139,7 @@ using Test
         end
     end
 
-    if isdefined(Distributions, :ProductDistribution)
+    @testset "ProductDistribution" begin
         @testset "ProductDistribution (multivariate components)" begin
             @testset for Ar in (Array, DimArray),
                     TA in (PDMat, PDiagMat, ScalMat),
@@ -180,7 +180,7 @@ using Test
         end
     end
 
-    if isdefined(Distributions, :ProductNamedTupleDistribution)
+    @testset "ProductNamedTupleDistribution" begin
         @testset "ProductNamedTupleDistribution" begin
             Σ = [1.0 0.5 0.25; 0.5 1.0 0.5; 0.25 0.5 1.0]
             d = product_distribution(
@@ -218,24 +218,22 @@ using Test
         end
     end
 
-    if isdefined(Distributions, :JointOrderStatistics)
-        @testset "JointOrderStatistics" begin
-            @testset for Ar in (Array, DimArray),
-                    T in (Float64, Float32),
-                    udist in [Normal(rand(T)...), Beta(rand(T)...)],
-                    n in (10, 20),
-                    ranks in (sort(shuffle(1:n)[1:5]), 1:n, [1, n], [n ÷ 2])
+    @testset "JointOrderStatistics" begin
+        @testset for Ar in (Array, DimArray),
+                T in (Float64, Float32),
+                udist in [Normal(rand(T)...), Beta(rand(T)...)],
+                n in (10, 20),
+                ranks in (sort(shuffle(1:n)[1:5]), 1:n, [1, n], [n ÷ 2])
 
-                dist = JointOrderStatistics(udist, n, ranks)
-                x = rand(dist)
-                xw = wrap_array(Ar, x)
-                if length(ranks) == 1
-                    logp = pointwise_conditional_logpdfs(dist, xw)
-                    @test axes(logp) == axes(xw)
-                    @test only(logp) ≈ logpdf(dist, xw)
-                else
-                    test_pointwise_matches_marginal(dist, xw)
-                end
+            dist = JointOrderStatistics(udist, n, ranks)
+            x = rand(dist)
+            xw = wrap_array(Ar, x)
+            if length(ranks) == 1
+                logp = pointwise_conditional_logpdfs(dist, xw)
+                @test axes(logp) == axes(xw)
+                @test only(logp) ≈ logpdf(dist, xw)
+            else
+                test_pointwise_matches_marginal(dist, xw)
             end
         end
     end

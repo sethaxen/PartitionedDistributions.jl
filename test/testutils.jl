@@ -50,7 +50,6 @@ function default_rtol(dist::Distributions.Distribution{<:ArrayLikeVariate}, atol
     rtol = cbrt(eps(float(eltype(dist))))
     return atol > 0 ? zero(rtol) : rtol
 end
-
 function default_rtol(dist::Distributions.ProductNamedTupleDistribution, atol::Real)
     return maximum(Base.Fix2(default_rtol, atol), dist.dists)
 end
