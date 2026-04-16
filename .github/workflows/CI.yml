@@ -56,13 +56,6 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/cache@v3
-      - name: Install dependencies, build and deploy
-        run: |
-          using Pkg
-          Pkg.develop(PackageSpec(path=pwd()))
-          Pkg.instantiate()
-          include(joinpath(pwd(), "docs", "make.jl"))
+      - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-        shell: julia --color=yes --project=docs/ {0}
