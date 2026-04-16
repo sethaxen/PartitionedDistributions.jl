@@ -26,7 +26,7 @@ jobs:
           - 'min'
           - 'lts'
           - '1'
-          - 'pre'
+          # - 'pre'  # TODO: run on pre-releases once JET supports it
         os:
           - ubuntu-latest
         arch:
