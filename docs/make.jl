@@ -19,3 +19,7 @@ makedocs(;
     # don't require match on trailing digits in floating point numbers
     doctestfilters = [r"(\d*)\.(\d{4})\d+" => s"\1.\2***"],
 )
+
+deploydocs(
+    repo = "github.com/sethaxen/PartitionedDistributions.jl.git", devbranch = "main", push_preview = true,
+)
