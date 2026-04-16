@@ -135,4 +135,30 @@ index_complement(n::Int, i) = setdiff(1:n, i)
             @test PartitionedDistributions.factorize_indices(A, inds) == ([1, 5], [1, 2, 3, 4], [1, 2, 3])
         end
     end
+
+    @testset "_reshape" begin
+        udist = Normal()
+        @test PartitionedDistributions._reshape(udist, ()) === udist
+        @test PartitionedDistributions._reshape(udist, (1,)) === reshape(udist, (1,))
+        @test PartitionedDistributions._reshape(udist, (1, 1)) === reshape(udist, (1, 1))
+
+        mvdist = MvNormal(randn(12), rand_pdmat(PDMat{Float64}, 12))
+        @test PartitionedDistributions._reshape(mvdist, (3, 4)) === reshape(mvdist, (3, 4))
+        @test PartitionedDistributions._reshape(mvdist, (3, 4, 1)) === reshape(mvdist, (3, 4, 1))
+
+        rdist = reshape(mvdist, (3, 4))
+        rdist2 = PartitionedDistributions._reshape(rdist, (2, 6))
+        @test rdist2 isa Distributions.ReshapedDistribution
+        @test rdist2 === reshape(mvdist, (2, 6))
+
+        rudist = reshape(udist, ())
+        @test rudist isa Distributions.ReshapedDistribution{0}
+        @test PartitionedDistributions._reshape(rudist, ()) === udist
+
+        mv1dist = MvNormal(randn(1), rand_pdmat(PDMat{Float64}, 1))
+        rudist2 = reshape(mv1dist, ())
+        @test rudist2 isa Distributions.ReshapedDistribution{0}
+        @test PartitionedDistributions._reshape(rudist2, ()) === rudist2
+        @test PartitionedDistributions._reshape(rudist2, (1, 1)) === reshape(mv1dist, (1, 1))
+    end
 end
