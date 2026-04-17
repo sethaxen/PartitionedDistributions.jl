@@ -149,6 +149,34 @@ function _marginal_impl(dist::Distributions.MatrixTDist, i)
     length(sz) == length(size(dist_marg)) && return dist_marg
     return _reshape(dist_marg, sz)
 end
+
+function _marginal_impl(dist::Distributions.Wishart, i)
+    cart = CartesianIndices(axes(dist))
+    cart_i = @views cart[i]
+    if length(cart_i) > 1 && issubset(cart_i, view(cart, LinearAlgebra.diagind(cart)))
+        LinearAlgebra.isdiag(dist.S) ||
+            throw(ArgumentError("Diagonal marginals of the Wishart distribution are only supported for diagonal scale."))
+        return _reshape(Distributions.product_distribution([_marginal_impl(dist, Tuple(j)...) for j in cart_i]), size(cart_i))
+    end
+    inds_per_dim = factorize_indices(cart, i)
+    isnothing(inds_per_dim) && throw(ArgumentError("Indices do not factor into per-dimension index vectors"))
+    dist_marg = _marginal_impl(dist, inds_per_dim...)
+    sz = @views size(cart_i)
+    length(sz) == length(size(dist_marg)) && return dist_marg
+    return _reshape(dist_marg, sz)
+end
+function _marginal_impl(dist::Distributions.Wishart, i::Int)
+    return _marginal_impl(dist, Tuple(CartesianIndices(axes(dist))[i])...)
+end
+# Theorem 3.3.10 of Gupta & Nagar (2000) "Matrix variate distributions" doi: 10.1201/9780203749289
+function _marginal_impl(dist::Distributions.Wishart, i, j)
+    i == j || throw(ArgumentError("Only symmetric marginals of the Wishart distribution are supported."))
+    return Distributions.Wishart(dist.df, _pdview(dist.S, i))
+end
+function _marginal_impl(dist::Distributions.Wishart, i::Int, j::Int)
+    i == j && return Distributions.Gamma(dist.df / 2, 2 * dist.S[i, i])
+    throw(ArgumentError("Only symmetric marginals of the Wishart distribution are supported."))
+end
 function _marginal_impl(dist::Distributions.MixtureModel, i)
     return Distributions.MixtureModel(
         marginal.(Distributions.components(dist), Ref(i)),
