@@ -177,6 +177,32 @@ function _marginal_impl(dist::Distributions.Wishart, i::Int, j::Int)
     i == j && return Distributions.Gamma(dist.df / 2, 2 * dist.S[i, i])
     throw(ArgumentError("Only symmetric marginals of the Wishart distribution are supported."))
 end
+
+function _marginal_impl(dist::Distributions.InverseWishart, i)
+    cart = CartesianIndices(axes(dist))
+    cart_i = @views cart[i]
+    inds_per_dim = factorize_indices(cart, i)
+    isnothing(inds_per_dim) && throw(ArgumentError("Indices do not factor into per-dimension index vectors"))
+    dist_marg = _marginal_impl(dist, inds_per_dim...)
+    sz = @views size(cart_i)
+    length(sz) == length(size(dist_marg)) && return dist_marg
+    return _reshape(dist_marg, sz)
+end
+function _marginal_impl(dist::Distributions.InverseWishart, i::Int)
+    return _marginal_impl(dist, Tuple(CartesianIndices(axes(dist))[i])...)
+end
+# Theorem 3.4.2 of Gupta & Nagar (2000) "Matrix variate distributions" doi: 10.1201/9780203749289
+function _marginal_impl(dist::Distributions.InverseWishart, i, j)
+    i == j || throw(ArgumentError("Only symmetric marginals of the InverseWishart distribution are supported."))
+    Ψ_i = _pdview(dist.Ψ, i)
+    df = dist.df - (size(dist.Ψ, 1) - size(Ψ_i, 1))
+    return Distributions.InverseWishart(df, Ψ_i)
+end
+function _marginal_impl(dist::Distributions.InverseWishart, i::Int, j::Int)
+    i == j || throw(ArgumentError("Only symmetric marginals of the InverseWishart distribution are supported."))
+    df = dist.df - size(dist.Ψ, 1) + 1
+    return Distributions.InverseGamma(df / 2, dist.Ψ[i, i] / 2)
+end
 function _marginal_impl(dist::Distributions.MixtureModel, i)
     return Distributions.MixtureModel(
         marginal.(Distributions.components(dist), Ref(i)),
