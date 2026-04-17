@@ -203,6 +203,39 @@ function _marginal_impl(dist::Distributions.InverseWishart, i::Int, j::Int)
     df = dist.df - size(dist.Ψ, 1) + 1
     return Distributions.InverseGamma(df / 2, dist.Ψ[i, i] / 2)
 end
+
+function _marginal_impl(dist::Distributions.LKJ, i)
+    cart = CartesianIndices(axes(dist))
+    cart_i = @views cart[i]
+    inds_per_dim = factorize_indices(cart, i)
+    isnothing(inds_per_dim) && throw(ArgumentError("Indices do not factor into per-dimension index vectors"))
+    dist_marg = _marginal_impl(dist, inds_per_dim...)
+    sz = @views size(cart_i)
+    length(sz) == length(size(dist_marg)) && return dist_marg
+    return _reshape(dist_marg, sz)
+end
+function _marginal_impl(dist::Distributions.LKJ, i::Int)
+    return _marginal_impl(dist, Tuple(CartesianIndices(axes(dist))[i])...)
+end
+# LKJ §2.4
+function _marginal_impl(dist::Distributions.LKJ, i::Int, j::Int)
+    i == j && return Distributions.Dirac(oneunit(dist.η))
+    n = size(dist)[1]
+    α = (dist.η - 1) + n // 2
+    return Distributions.Beta(α, α) * 2 - 1
+end
+# Proof sketch:
+# - LKJ density invariant under symmetric permutation of the rows and columns, so WOLOG, i=j=1:ni
+# - if L=cholesky(R).L, then L[i,i] is Cholesky factor of R[i,i]
+# - L ~ LKJCholesky(n, η).L has independent rows; L[i,i] ~ LKJCholesky(ni, η + (n - ni) / 2).L
+# - R[i,i] ~ LKJ(ni, η + (n - ni) / 2)
+function _marginal_impl(dist::Distributions.LKJ, i, j)
+    i == j || throw(ArgumentError("Only symmetric marginals of the LKJ distribution are supported."))
+    n = size(dist)[1]
+    ni = length(i)
+    ηi = dist.η + (n - ni) // 2
+    return Distributions.LKJ(ni, ηi)
+end
 function _marginal_impl(dist::Distributions.MixtureModel, i)
     return Distributions.MixtureModel(
         marginal.(Distributions.components(dist), Ref(i)),
