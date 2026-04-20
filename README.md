@@ -6,4 +6,4 @@
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
 [![Aqua](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 
-PartitionedDistributions provides functionality for partitioning [Distributions.jl](https://github.com/JuliaStats/Distributions.jl)'s distributions into *conditional* and *marginal* distributions.
+PartitionedDistributions provides functionality for partitioning the variables of [Distributions.jl](https://github.com/JuliaStats/Distributions.jl)'s distributions into blocks and computing the associated *conditional* and *marginal* distributions.
