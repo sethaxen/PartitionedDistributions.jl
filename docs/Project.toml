@@ -6,3 +6,4 @@ PartitionedDistributions = "569bd051-8d7b-4221-bcb8-d78512b5866a"
 
 [compat]
 Documenter = "1"
+PartitionedDistributions = "0.0.1"
