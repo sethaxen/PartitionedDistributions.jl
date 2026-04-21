@@ -5,4 +5,5 @@ InvertedIndices = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
 PartitionedDistributions = "569bd051-8d7b-4221-bcb8-d78512b5866a"
 
 [compat]
+Distributions = "0.25.125"
 Documenter = "1"
