@@ -29,8 +29,11 @@ jobs:
       - uses: julia-actions/julia-downgrade-compat@v2
         with:
           julia_version: ${{ matrix.version }}
-          skip: LinearAlgebra,Random
+          projects: ".,test"
+          skip: LinearAlgebra,PartitionedDistributions,Random,Test
       - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: "test"
       - uses: julia-actions/julia-runtest@v1
         with:
           allow_reresolve: false
