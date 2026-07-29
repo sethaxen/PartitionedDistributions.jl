@@ -8,7 +8,7 @@ PartitionedDistributions = "569bd051-8d7b-4221-bcb8-d78512b5866a"
 PartitionedDistributions = {path = ".."}
 
 [compat]
-Distributions = "0.25.119"
+Distributions = "0.25.129"
 Documenter = "1"
 InvertedIndices = "1"
 PartitionedDistributions = "0.1"
