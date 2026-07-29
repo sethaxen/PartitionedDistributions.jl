@@ -18,14 +18,14 @@ julia> marginal(dist, 1)       # specify index to keep
 Normal{Float64}(μ=1.0, σ=1.0)
 
 julia> marginal(dist, [1, 3])  # specify indices to keep
-MvNormal{Float64, PDMats.PDMat{Float64, Matrix{Float64}}, SubArray{Float64, 1, Vector{Float64}, Tuple{Vector{Int64}}, false}}(
+FullNormal(
 dim: 2
 μ: [1.0, 3.0]
 Σ: [1.0 0.25; 0.25 1.0]
 )
 
 julia> marginal(dist, Not(2))  # alternatively, specify index to marginalize over
-MvNormal{Float64, PDMats.PDMat{Float64, Matrix{Float64}}, SubArray{Float64, 1, Vector{Float64}, Tuple{Vector{Int64}}, false}}(
+FullNormal(
 dim: 2
 μ: [1.0, 3.0]
 Σ: [1.0 0.25; 0.25 1.0]
