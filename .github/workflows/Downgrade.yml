@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        version: ['1.10']
+        version: ['lts']
         os: ['ubuntu-latest']
     steps:
       - uses: actions/checkout@v7
@@ -28,10 +28,14 @@ jobs:
           version: ${{ matrix.version }}
       - uses: julia-actions/julia-downgrade-compat@v2
         with:
-          julia_version: ${{ matrix.version }}
-          skip: LinearAlgebra,Random
+          mode: deps
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         with:
           allow_reresolve: false
           force_latest_compatible_version: false
+      - uses: julia-actions/julia-processcoverage@v1
+      - uses: codecov/codecov-action@v7
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
