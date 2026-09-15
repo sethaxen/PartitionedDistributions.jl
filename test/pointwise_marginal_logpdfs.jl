@@ -195,4 +195,50 @@ using Test
             @test logp[1, 1] == logp[3, 3] == 0
         end
     end
+
+    @testset "MixtureModel (multivariate)" begin
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (4, 5)
+
+            Σ_a = rand_pdmat(TA{T}, n)
+            Σ_b = rand_pdmat(TA{T}, n)
+            mix_mv = MixtureModel(
+                [MvNormal(randn(T, n), Σ_a), MvNormal(randn(T, n), Σ_b)],
+                T[0.4, 0.6],
+            )
+            x = rand(mix_mv)
+            test_pointwise_marginal_matches_marginal(mix_mv, wrap_array(Ar, x))
+        end
+    end
+
+    @testset "MixtureModel (heterogeneous multivariate component types)" begin
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (4, 5)
+
+            Σ_a = rand_pdmat(TA{T}, n)
+            Σ_b = rand_pdmat(TA{T}, n)
+            ν = 5 + 10 * rand(T)
+            mix = MixtureModel(
+                [MvNormal(randn(T, n), Σ_a), Distributions.GenericMvTDist(ν, randn(T, n), Σ_b)],
+                T[0.45, 0.55],
+            )
+            @test !isconcretetype(eltype(Distributions.components(mix)))
+            x = T.(rand(mix))
+            test_pointwise_marginal_matches_marginal(mix, wrap_array(Ar, x))
+        end
+    end
+
+    @testset "MixtureModel (matrix-variate components)" begin
+        @testset for Ar in (Array, DimArray), T in (Float64, Float32)
+            dist_a = MatrixNormal(randn(T, 3, 4), rand_pdmat(PDMat{T}, 3), rand_pdmat(PDMat{T}, 4))
+            dist_b = MatrixNormal(randn(T, 3, 4), rand_pdmat(PDMat{T}, 3), rand_pdmat(PDMat{T}, 4))
+            mix_mn = MixtureModel([dist_a, dist_b], T[0.45, 0.55])
+            x = rand(dist_a)  # rand(mix_mn) is not supported for matrix-variate mixtures
+            test_pointwise_marginal_matches_marginal(mix_mn, wrap_array(Ar, x))
+        end
+    end
 end

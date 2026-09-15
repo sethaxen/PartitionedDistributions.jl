@@ -179,6 +179,24 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# Mixtures of array-variate distributions: the marginal of a mixture is the mixture of the
+# marginals of its components with the same weights.
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractArray{<:Number, N},
+        dist::Distributions.AbstractMixtureModel{Distributions.ArrayLikeVariate{N}},
+        x::AbstractArray{<:Number, N},
+    ) where {N}
+    logp_k = similar(logp)
+    fill!(logp, -Inf)
+    K = Distributions.ncomponents(dist)
+    for (k, w_k) in zip(1:K, Distributions.probs(dist))
+        dist_k = Distributions.component(dist, k)
+        pointwise_marginal_logpdfs!!(logp_k, dist_k, x)
+        logp .= LogExpFunctions.logaddexp.(logp, log(w_k) .+ logp_k)
+    end
+    return logp
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
