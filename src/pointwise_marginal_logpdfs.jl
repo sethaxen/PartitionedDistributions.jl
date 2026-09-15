@@ -104,9 +104,25 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# Multivariate t-distribution: elementwise marginals are affine univariate t-distributions
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.GenericMvTDist,
+        x::AbstractVector{<:Number},
+    )
+    return _tdist_logpdfs!(logp, dist.df, dist.μ, LinearAlgebra.diag(dist.Σ), x)
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
 function _normal_logpdfs!(logp, μ, σ2, x)
     return @. logp = -(log(σ2) + (x - μ)^2 / σ2 + log2π) / 2
+end
+
+# elementwise log-pdf of μ + sqrt(σ2) * TDist(ν) at x
+function _tdist_logpdfs!(logp::AbstractArray{T}, ν, μ, σ2, x) where {T}
+    α = (ν + 1) / 2
+    logc = SpecialFunctions.loggamma(α) - SpecialFunctions.loggamma(ν / 2) - (log(ν) + T(logπ)) / 2
+    return @. logp = logc - α * log1p((x - μ)^2 / (ν * σ2)) - log(σ2) / 2
 end
