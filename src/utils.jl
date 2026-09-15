@@ -27,6 +27,14 @@ _pdview(A::PDMats.AbstractPDMat, i) = PDMats.AbstractPDMat(view(A, i, i))
 _pdview(A::PDMats.PDiagMat, i) = PDMats.PDiagMat(view(A.diag, i))
 _pdview(A::PDMats.ScalMat, i) = PDMats.ScalMat(size(view(A, i, i), 1), first(A))
 
+# A + S for symmetric A, avoiding broadcasting with `S` directly: `Symmetric` hides the
+# broadcast style of a wrapped array (e.g. a DimArray), so `A + S` can fail to allocate.
+# Only the `uplo` triangle of the parent is read, so the result is exact.
+function _symadd(A::AbstractMatrix, S::LinearAlgebra.Symmetric)
+    return LinearAlgebra.Symmetric(A + parent(S), LinearAlgebra.sym_uplo(S.uplo))
+end
+_symadd(A::AbstractMatrix, S::AbstractMatrix) = A + S
+
 _mvnormal(dist::Distributions.MvNormal) = dist
 _mvnormal(dist::Distributions.AbstractMvNormal) = Distributions.MvNormal(Distributions.mean(dist), Distributions.cov(dist))
 
