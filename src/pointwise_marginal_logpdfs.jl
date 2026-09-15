@@ -236,6 +236,20 @@ end
     end
 end
 
+# NamedTuple-variate product distributions
+function pointwise_marginal_logpdfs!!(
+        logp::NamedTuple{K},
+        dist::Distributions.ProductNamedTupleDistribution,
+        x::NamedTuple,
+    ) where {K}
+    return map(
+        pointwise_marginal_logpdfs!!,
+        logp,
+        NamedTuple{K}(dist.dists),
+        NamedTuple{K}(x),
+    )
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x

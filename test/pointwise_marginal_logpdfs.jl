@@ -295,4 +295,46 @@ using Test
             end
         end
     end
+
+    @testset "ProductNamedTupleDistribution" begin
+        @testset "ProductNamedTupleDistribution" begin
+            Σ = [1.0 0.5 0.25; 0.5 1.0 0.5; 0.25 0.5 1.0]
+            d = product_distribution(
+                (
+                    x = MvNormal(zeros(3), Σ),
+                    y = MvNormal([1.0, 2.0], [2.0 0.0; 0.0 3.0]),
+                )
+            )
+            z = rand(d)
+            @testset for x in (z, reverse(z))
+                logp_nt = pointwise_marginal_logpdfs(d, x)
+                @test logp_nt isa NamedTuple
+                @test keys(logp_nt) === keys(x)
+                @testset for k in keys(logp_nt)
+                    @test logp_nt[k] ≈ pointwise_marginal_logpdfs(d.dists[k], x[k])
+                end
+                logp_nt2 = map(similar, logp_nt)
+                out = pointwise_marginal_logpdfs!!(logp_nt2, d, x)
+                @test all(map(===, out, logp_nt2))
+                @test _isapprox(out, logp_nt)
+            end
+        end
+
+        @testset "nested ProductNamedTuple (inner product + scalars)" begin
+            inner = product_distribution(
+                (
+                    u = MvNormal(zeros(2), Matrix{Float64}(I, 2, 2)),
+                    v = Normal(0.5, 0.25),
+                )
+            )
+            outer = product_distribution((block = inner, w = Gamma(2.0, 3.0)))
+            z = rand(outer)
+            logp_nt = pointwise_marginal_logpdfs(outer, z)
+            @test logp_nt isa NamedTuple
+            @test keys(logp_nt) === keys(z)
+            @testset for k in keys(logp_nt)
+                @test _isapprox(logp_nt[k], pointwise_marginal_logpdfs(outer.dists[k], z[k]))
+            end
+        end
+    end
 end
