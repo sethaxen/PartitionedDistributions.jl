@@ -231,6 +231,45 @@ function numerical_marginal_logpdf(dist::LKJ, x::AbstractMatrix, i::Int, j::Int;
 end
 
 """
+    vonmises_coordinate_logpdf(θ0, κ, i, t) -> Float64
+
+Log-density at `t ∈ (-1, 1)` of the `i`th coordinate of `(cos θ, sin θ)` with `θ ~ VonMises(θ0, κ)`,
+obtained by summing over the two angles that map to `t`. Used as an implementation-independent
+reference for `VonMisesFisher` with `D = 2`.
+"""
+function vonmises_coordinate_logpdf(θ0, κ, i::Int, t)
+    vm = VonMises(θ0, κ)
+    wrap(θ) = mod(θ - θ0 + π, 2π) + θ0 - π  # into the support of `vm`
+    θs = i == 1 ? (acos(t), -acos(t)) : (asin(t), π - asin(t))
+    return log(sum(θ -> pdf(vm, wrap(θ)), θs)) - log((1 - t) * (1 + t)) / 2
+end
+
+"""
+    numerical_marginal_logpdf(dist::VonMisesFisher, x, i; npts=400) -> Float64
+
+Log-density of the marginal of the `i`th coordinate of a `VonMisesFisher` on the 2-sphere,
+evaluated at `x[i]`, computed by integrating the joint density over the circle of unit vectors
+`y` with `y[i] == x[i]` using the midpoint rule (spectrally accurate for periodic integrands).
+Used as an implementation-independent reference.
+"""
+function numerical_marginal_logpdf(dist::VonMisesFisher, x::AbstractVector, i::Int; npts::Int = 400)
+    length(dist) == 3 || throw(ArgumentError("only D = 3 is supported"))
+    j, k = filter(!=(i), 1:3)
+    t = Float64(x[i])
+    r = sqrt((1 - t) * (1 + t))
+    y = zeros(3)
+    y[i] = t
+    lps = map(1:npts) do m
+        φ = 2π * (m - 0.5) / npts
+        y[j] = r * cos(φ)
+        y[k] = r * sin(φ)
+        return logpdf(dist, y)
+    end
+    lmax = maximum(lps)
+    return lmax + log(sum(lp -> exp(lp - lmax), lps)) + log(2π / npts)
+end
+
+"""
     enumerated_marginal_logpdf(dist, x, i) -> Float64
 
 Log-pmf of the marginal of the `i`th element of a 3-category `Multinomial` or

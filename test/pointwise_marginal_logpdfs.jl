@@ -427,4 +427,54 @@ using Test
             end
         end
     end
+
+    @testset "VonMisesFisher" begin
+        # sampling and the unit-vector check only work reliably for Float64 parameters,
+        # so construct with Float64 and convert (which skips the check)
+        @testset "D = 2: coordinates of (cos θ, sin θ) with θ ~ VonMises" begin
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32)
+                θ0 = 2π * rand() - π
+                κ = 0.5 + 4 * rand()
+                dist64 = VonMisesFisher([cos(θ0), sin(θ0)], κ)
+                dist = convert(VonMisesFisher{T}, dist64)
+                x = T.(rand(dist64))
+                logp_ref = [vonmises_coordinate_logpdf(θ0, κ, i, Float64(x[i])) for i in 1:2]
+                test_pointwise_marginal_matches_reference(dist, wrap_array(Ar, x), logp_ref)
+            end
+        end
+        @testset "D = 3: matches integration over the orthogonal circle" begin
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32), κ in (0.5, 5.0)
+                dist64 = VonMisesFisher(normalize(randn(3)), κ)
+                dist = convert(VonMisesFisher{T}, dist64)
+                x = T.(rand(dist64))
+                logp_ref = [numerical_marginal_logpdf(dist64, x, i) for i in 1:3]
+                test_pointwise_marginal_matches_reference(dist, wrap_array(Ar, x), logp_ref)
+            end
+            @testset "coordinate equal to ±1 has a finite density" begin
+                dist = VonMisesFisher(normalize(randn(3)), 2.0)
+                @testset for x in ([0.0, 0.0, 1.0], [0.0, -1.0, 0.0])
+                    logp = pointwise_marginal_logpdfs(dist, x)
+                    @test all(isfinite, logp)
+                    @test logp ≈ [numerical_marginal_logpdf(dist, x, i) for i in 1:3]
+                end
+            end
+        end
+        @testset "coordinates outside [-1, 1] have log-density -Inf" begin
+            dist = VonMisesFisher(normalize(randn(4)), 2.0)
+            logp = pointwise_marginal_logpdfs(dist, [1.5, 0.0, 0.0, -1.0000001])
+            @test logp[[1, 4]] == [-Inf, -Inf]
+            @test all(isfinite, logp[2:3])
+        end
+        @testset "Monte Carlo normalization" begin
+            @testset for D in (3, 4, 6, 10), κ in (0.5, 5.0, 40.0)
+                dist = VonMisesFisher(normalize(randn(D)), κ)
+                test_pointwise_marginal_mc_normalization(dist, 200_000; atol = 0.03)
+            end
+        end
+        @testset "large D and small κ, where the cached normalizing constant overflows" begin
+            dist = VonMisesFisher([1.0; zeros(599)], 5.0)
+            @test all(isfinite, pointwise_marginal_logpdfs(dist, rand(dist)))
+            test_pointwise_marginal_mc_normalization(dist, 20_000; atol = 0.05)
+        end
+    end
 end

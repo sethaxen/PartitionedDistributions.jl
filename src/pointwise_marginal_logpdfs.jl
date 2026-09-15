@@ -224,6 +224,34 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# von Mises–Fisher distribution: the marginal density of the coordinate xᵢ of x ∈ S^(D-1) is
+#   C_D(κ) (2π)^((D-1)/2) (1 - xᵢ²)^ν exp(κ μᵢ xᵢ) I_ν(s) / s^ν,   ν = (D - 3) / 2,
+# with s = κ sqrt((1 - μᵢ²)(1 - xᵢ²)), obtained by integrating the density over the
+# (D-2)-sphere of directions orthogonal to eᵢ. The normalizing constant C_D(κ) is recomputed with
+# `_logbesseli` rather than taken from `dist` so that large D with small κ does not overflow.
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{T},
+        dist::Distributions.VonMisesFisher,
+        x::AbstractVector{<:Number},
+    ) where {T <: Number}
+    (; μ, κ) = dist
+    D = length(μ)
+    ν = (D - 3) / 2
+    # log C_D(κ) + (D - 1) / 2 * log(2π)
+    logc = (D / 2 - 1) * log(κ) - T(log2π) / 2 - _logbesseli(D / 2 - 1, κ)
+    logp .= _vmf_marginal_logpdf.(logc, κ, ν, μ, x)
+    return logp
+end
+function _vmf_marginal_logpdf(logc, κ, ν, μi, xi)
+    abs(xi) <= 1 || return oftype(logc, -Inf)
+    xi2c = (1 - xi) * (1 + xi)  # 1 - xᵢ², accurate near |xᵢ| = 1
+    μi2c = max(zero(μi), (1 - μi) * (1 + μi))  # guard against rounding of the unit vector μ
+    s = κ * sqrt(μi2c * xi2c)
+    # (1 - xᵢ²)^ν, avoiding 0 * -Inf for D == 3 at |xᵢ| == 1
+    logjac = iszero(ν) ? zero(logc) : ν * log(xi2c)
+    return logc + κ * μi * xi + logjac + _logbesseli_over_power(ν, s)
+end
+
 # Mixtures of array-variate distributions: the marginal of a mixture is the mixture of the
 # marginals of its components with the same weights.
 function pointwise_marginal_logpdfs!!(
@@ -319,4 +347,10 @@ function _tdist_logpdfs!(logp::AbstractArray{T}, ν, μ, σ2, x) where {T}
     α = (ν + 1) / 2
     logc = SpecialFunctions.loggamma(α) - SpecialFunctions.loggamma(ν / 2) - (log(ν) + T(logπ)) / 2
     return @. logp = logc - α * log1p((x - μ)^2 / (ν * σ2)) - log(σ2) / 2
+end
+
+# log(I_ν(s) / s^ν), which is finite as s → 0
+function _logbesseli_over_power(ν, s)
+    iszero(s) && return -ν * oftype(float(s), logtwo) - SpecialFunctions.loggamma(ν + 1)
+    return _logbesseli(ν, s) - ν * log(s)
 end
