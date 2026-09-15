@@ -250,6 +250,18 @@ function pointwise_marginal_logpdfs!!(
     )
 end
 
+# Reshaped distributions, just delegate to the underlying distribution and reshape
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractArray{<:Number, N},
+        dist::Distributions.ReshapedDistribution{N},
+        x::AbstractArray{<:Number, N},
+    ) where {N}
+    x_reshape = reshape(x, size(dist.dist))
+    logp_reshape = reshape(logp, size(dist.dist))
+    pointwise_marginal_logpdfs!!(logp_reshape, dist.dist, x_reshape)
+    return logp
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x

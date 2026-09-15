@@ -337,4 +337,21 @@ using Test
             end
         end
     end
+
+    @testset "ReshapedDistribution" begin
+        @testset for Ar in (Array, DimArray), T in (Float64, Float32)
+            m, n = 3, 4
+            M = randn(T, m, n)
+            U = rand_pdmat(PDMat{T}, m)
+            V = rand_pdmat(PDMat{T}, n)
+            dist = MatrixNormal(M, U, V)
+            y = rand(dist)
+            for sz in ((n, m), (m * n,))
+                rdist = reshape(dist, sz)
+                rdist isa Distributions.ReshapedDistribution || continue
+                ry = reshape(y, sz)
+                test_pointwise_marginal_matches_marginal(rdist, wrap_array(Ar, ry))
+            end
+        end
+    end
 end
