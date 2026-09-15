@@ -92,6 +92,18 @@ function pointwise_marginal_logpdfs!!(
     return _normal_logpdfs!(logp, M, σ2, x)
 end
 
+# Multivariate log-normal distribution
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.MvLogNormal,
+        x::AbstractVector{<:Number},
+    )
+    logx = log.(x)
+    pointwise_marginal_logpdfs!!(logp, dist.normal, logx)
+    logp .-= logx
+    return logp
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x

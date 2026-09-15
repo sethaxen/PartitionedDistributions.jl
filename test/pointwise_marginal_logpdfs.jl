@@ -55,4 +55,17 @@ using Test
             test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
         end
     end
+
+    @testset "MvLogNormal" begin
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (3, 4)
+
+            Σ = rand_pdmat(TA{T}, n)
+            dist = MvLogNormal(MvNormal(randn(T, n), Σ))
+            x = rand(dist)
+            test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+        end
+    end
 end
