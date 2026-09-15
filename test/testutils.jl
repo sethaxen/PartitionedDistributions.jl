@@ -205,6 +205,31 @@ function numerical_marginal_logpdf(dist::Dirichlet, x::AbstractVector, i::Int; n
 end
 
 """
+    numerical_marginal_logpdf(dist::LKJ, x, i, j; npts=1_000) -> Float64
+
+Log-density of the marginal of the off-diagonal entry `(i, j)` of a `3 × 3` `LKJ`, evaluated at
+`x[i, j]`, computed by integrating the joint density over the other two free correlations with
+a midpoint rule. Used as an implementation-independent reference.
+"""
+function numerical_marginal_logpdf(dist::LKJ, x::AbstractMatrix, i::Int, j::Int; npts::Int = 1_000)
+    dist.d == 3 || throw(ArgumentError("only 3 × 3 LKJ is supported"))
+    i != j || throw(ArgumentError("only off-diagonal entries have a density"))
+    k = only(filter(∉((i, j)), 1:3))
+    R = Matrix{Float64}(I, 3, 3)
+    R[i, j] = R[j, i] = x[i, j]
+    h = 2 / npts
+    lps = Float64[]
+    for a in 1:npts, b in 1:npts
+        R[i, k] = R[k, i] = -1 + (a - 0.5) * h
+        R[j, k] = R[k, j] = -1 + (b - 0.5) * h
+        isposdef(R) || continue
+        push!(lps, logpdf(dist, R))
+    end
+    lmax = maximum(lps)
+    return lmax + log(sum(lp -> exp(lp - lmax), lps)) + 2 * log(h)
+end
+
+"""
     enumerated_marginal_logpdf(dist, x, i) -> Float64
 
 Log-pmf of the marginal of the `i`th element of a 3-category `Multinomial` or

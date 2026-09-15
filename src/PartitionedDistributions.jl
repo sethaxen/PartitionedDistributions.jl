@@ -3,7 +3,7 @@ module PartitionedDistributions
 using Distributions: Distributions
 using FillArrays: FillArrays
 using InvertedIndices: Not
-using IrrationalConstants: logπ, log2π
+using IrrationalConstants: logπ, log2π, logtwo
 using LinearAlgebra: LinearAlgebra, I
 using LogExpFunctions: LogExpFunctions
 using PDMats: PDMats

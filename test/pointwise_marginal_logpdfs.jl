@@ -162,4 +162,37 @@ using Test
             end
         end
     end
+
+    @testset "LKJ" begin
+        @testset "d = 2: off-diagonal marginals equal the joint" begin
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32)
+                dist = LKJ(2, T(0.5) + 3 * rand(T))
+                x = T.(rand(dist))
+                lp = logpdf(dist, x)
+                logp_ref = [i == j ? zero(lp) : lp for i in 1:2, j in 1:2]
+                test_pointwise_marginal_matches_reference(dist, wrap_array(Ar, x), logp_ref)
+            end
+        end
+        @testset "d = 3: off-diagonal marginals match numerical integration" begin
+            @testset for T in (Float64, Float32)
+                dist = LKJ(3, T(1.5) + 3 * rand(T))
+                x = T.(rand(dist))
+                logp = pointwise_marginal_logpdfs(dist, x)
+                @test eltype(logp) === T
+                @test all(iszero, diag(logp))
+                @test logp == logp'
+                @testset for (i, j) in ((1, 2), (1, 3), (2, 3))
+                    @test logp[i, j] ≈ numerical_marginal_logpdf(dist, x, i, j) rtol = 1.0e-4
+                end
+            end
+        end
+        @testset "diagonal entries not equal to 1 have log-density -Inf" begin
+            dist = LKJ(3, 2.0)
+            x = rand(dist)
+            x[2, 2] = 0.9
+            logp = pointwise_marginal_logpdfs(dist, x)
+            @test logp[2, 2] == -Inf
+            @test logp[1, 1] == logp[3, 3] == 0
+        end
+    end
 end

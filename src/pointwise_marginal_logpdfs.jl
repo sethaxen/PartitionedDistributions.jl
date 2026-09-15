@@ -157,6 +157,28 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# LKJ distribution: off-diagonal marginals are 2 * Beta(a, a) - 1 with a = η - 1 + d / 2
+# (Lewandowski, Kurowicka & Joe (2009), doi: 10.1016/j.jmva.2009.04.008);
+# diagonal entries are identically 1.
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractMatrix{T},
+        dist::Distributions.LKJ,
+        x::AbstractMatrix{<:Number},
+    ) where {T <: Number}
+    (; d, η) = dist
+    a = η - 1 + d / 2
+    beta = Distributions.Beta(a, a)
+    for j in axes(x, 2), i in axes(x, 1)
+        r = x[i, j]
+        logp[i, j] = if i == j
+            isone(r) ? zero(T) : T(-Inf)
+        else
+            Distributions.logpdf(beta, (r + 1) / 2) - T(logtwo)
+        end
+    end
+    return logp
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
