@@ -82,6 +82,15 @@ function pointwise_marginal_logpdfs!!(
     )
     return _normal_logpdfs!(logp, dist.μ, _pd_diag_inv(dist.J), x)
 end
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractMatrix{<:Number},
+        dist::Distributions.MatrixNormal,
+        x::AbstractMatrix{<:Number},
+    )
+    (; M, U, V) = dist
+    σ2 = LinearAlgebra.diag(U) .* LinearAlgebra.diag(V)'
+    return _normal_logpdfs!(logp, M, σ2, x)
+end
 
 # Helper functions
 

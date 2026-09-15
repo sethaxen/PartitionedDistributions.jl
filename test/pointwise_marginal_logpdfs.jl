@@ -41,4 +41,18 @@ using Test
             test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
         end
     end
+
+    @testset "MatrixNormal" begin
+        @testset for Ar in (Array, DimArray),
+                T in (Float64, Float32),
+                (m, n) in ((3, 4), (2, 5))
+
+            M = randn(T, m, n)
+            U = rand_pdmat(PDMat{T}, m)
+            V = rand_pdmat(PDMat{T}, n)
+            dist = MatrixNormal(M, U, V)
+            x = rand(dist)
+            test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+        end
+    end
 end
