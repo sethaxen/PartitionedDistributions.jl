@@ -111,27 +111,44 @@ function test_pointwise_matches_conditional(
 end
 
 """
-    test_pointwise_marginal_matches_marginal(dist, x; atol, rtol)
+    test_pointwise_marginal_matches_reference(dist, x, logp_ref; atol, rtol)
 
-For array-variate `dist`, check that `pointwise_marginal_logpdfs` agrees with
-`logpdf(marginal(dist, i), x[i])` for each `i in eachindex(x)`, that
-`axes(logp) == axes(x)`, and that `pointwise_marginal_logpdfs!!` fills its first argument in-place.
-For [`ProductNamedTupleDistribution`](@ref), recurse into each factor (independent blocks).
+For array-variate `dist`, check that `pointwise_marginal_logpdfs(dist, x)` agrees with
+`logp_ref`, that `axes(logp) == axes(x)` (so e.g. `DimensionalData.DimArray` inputs preserve
+dimensions on output), and that `pointwise_marginal_logpdfs!!` fills its first argument in-place.
 """
-function test_pointwise_marginal_matches_marginal(
+function test_pointwise_marginal_matches_reference(
         dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
-        x::AbstractArray{<:Number};
+        x::AbstractArray{<:Number},
+        logp_ref;
         atol::Real = 0,
         rtol::Real = default_rtol(dist, atol),
     )
     logp = pointwise_marginal_logpdfs(dist, x)
     @test axes(logp) == axes(x)
-    logp_ref = [logpdf(marginal(dist, i), x[i]) for i in LinearIndices(x)]
     @test logp ≈ logp_ref rtol = rtol atol = atol
     logp2 = similar(logp)
     @test pointwise_marginal_logpdfs!!(logp2, dist, x) === logp2
     @test logp2 == logp
     return nothing
+end
+
+"""
+    test_pointwise_marginal_matches_marginal(dist, x; atol, rtol)
+
+For array-variate `dist`, check that `pointwise_marginal_logpdfs` agrees with
+`logpdf(marginal(dist, i), x[i])` for each `i in eachindex(x)`
+(see [`test_pointwise_marginal_matches_reference`](@ref)).
+
+Does not apply to distributions without a working [`marginal`](@ref) (e.g. [`Dirichlet`](@ref)).
+"""
+function test_pointwise_marginal_matches_marginal(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        x::AbstractArray{<:Number};
+        kwargs...,
+    )
+    logp_ref = [logpdf(marginal(dist, i), x[i]) for i in LinearIndices(x)]
+    return test_pointwise_marginal_matches_reference(dist, x, logp_ref; kwargs...)
 end
 
 function test_pointwise_marginal_matches_marginal(

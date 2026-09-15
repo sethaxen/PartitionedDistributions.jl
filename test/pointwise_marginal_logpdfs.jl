@@ -103,13 +103,8 @@ using Test
             @testset for Ar in (Array, DimArray), T in (Float64, Float32)
                 dist = Dirichlet(T(0.5) .+ 3 * rand(T, 2))
                 x = rand(dist)
-                xw = wrap_array(Ar, x)
-                logp = pointwise_marginal_logpdfs(dist, xw)
-                @test axes(logp) == axes(xw)
-                @test logp ≈ fill(logpdf(dist, x), 2)
-                logp2 = similar(logp)
-                @test pointwise_marginal_logpdfs!!(logp2, dist, xw) === logp2
-                @test logp2 == logp
+                logp_ref = fill(logpdf(dist, x), 2)
+                test_pointwise_marginal_matches_reference(dist, wrap_array(Ar, x), logp_ref)
             end
         end
         @testset "3 components: marginals match numerical integration" begin
