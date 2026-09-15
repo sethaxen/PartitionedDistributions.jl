@@ -82,4 +82,19 @@ using Test
             test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
         end
     end
+
+    @testset "MatrixTDist" begin
+        @testset for Ar in (Array, DimArray),
+                T in (Float64, Float32),
+                (m, n) in ((3, 4), (2, 5))
+
+            M = randn(T, m, n)
+            Σ = rand_pdmat(PDMat{T}, m)
+            Ω = rand_pdmat(PDMat{T}, n)
+            ν = 5 + 10 * rand(T)
+            dist = MatrixTDist(ν, M, Σ, Ω)
+            x = rand(dist)
+            test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+        end
+    end
 end

@@ -113,6 +113,17 @@ function pointwise_marginal_logpdfs!!(
     return _tdist_logpdfs!(logp, dist.df, dist.μ, LinearAlgebra.diag(dist.Σ), x)
 end
 
+# Matrix-variate t-distribution
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractMatrix{<:Number},
+        dist::Distributions.MatrixTDist,
+        x::AbstractMatrix{<:Number},
+    )
+    (; ν, M, Σ, Ω) = dist
+    σ2 = LinearAlgebra.diag(Σ) .* LinearAlgebra.diag(Ω)' ./ ν
+    return _tdist_logpdfs!(logp, ν, M, σ2, x)
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
