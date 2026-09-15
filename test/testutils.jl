@@ -163,6 +163,31 @@ end
 
 
 """
+    numerical_marginal_logpdf(dist, x, i; npts=100_000) -> Float64
+
+Log-density of the marginal of the `i`th element of a 3-component `Dirichlet`, evaluated at
+`x[i]`, computed by integrating the joint density over the remaining free coordinate with a
+midpoint rule. Used as an implementation-independent reference.
+"""
+function numerical_marginal_logpdf(dist::Dirichlet, x::AbstractVector, i::Int; npts::Int = 100_000)
+    length(dist) == 3 || throw(ArgumentError("only 3-component Dirichlet is supported"))
+    j, k = filter(!=(i), 1:3)
+    v = Float64(x[i])
+    w = 1 - v
+    h = w / npts
+    y = zeros(3)
+    y[i] = v
+    lps = map(1:npts) do m
+        t = (m - 0.5) * h
+        y[j] = t
+        y[k] = w - t
+        return logpdf(dist, y)
+    end
+    lmax = maximum(lps)
+    return lmax + log(sum(lp -> exp(lp - lmax), lps)) + log(h)
+end
+
+"""
     test_marginal_moments_match(dist, inds...; test_var::Bool=true, test_cov::Bool=false)
 
 Test that moments of `marginal(dist, inds...)` match slices of the moments of `dist`.

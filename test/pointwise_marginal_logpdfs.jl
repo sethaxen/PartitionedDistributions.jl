@@ -97,4 +97,31 @@ using Test
             test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
         end
     end
+
+    @testset "Dirichlet" begin
+        @testset "2 components: marginals equal the joint" begin
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32)
+                dist = Dirichlet(T(0.5) .+ 3 * rand(T, 2))
+                x = rand(dist)
+                xw = wrap_array(Ar, x)
+                logp = pointwise_marginal_logpdfs(dist, xw)
+                @test axes(logp) == axes(xw)
+                @test logp ≈ fill(logpdf(dist, x), 2)
+                logp2 = similar(logp)
+                @test pointwise_marginal_logpdfs!!(logp2, dist, xw) === logp2
+                @test logp2 == logp
+            end
+        end
+        @testset "3 components: marginals match numerical integration" begin
+            @testset for T in (Float64, Float32)
+                dist = Dirichlet(T(1.5) .+ 3 * rand(T, 3))
+                x = rand(dist)
+                logp = pointwise_marginal_logpdfs(dist, x)
+                @test eltype(logp) === T
+                @testset for i in 1:3
+                    @test logp[i] ≈ numerical_marginal_logpdf(dist, x, i) rtol = 1.0e-4
+                end
+            end
+        end
+    end
 end

@@ -124,6 +124,17 @@ function pointwise_marginal_logpdfs!!(
     return _tdist_logpdfs!(logp, ν, M, σ2, x)
 end
 
+# Dirichlet distribution: elementwise marginals are Beta distributions
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.Dirichlet,
+        x::AbstractVector{<:Number},
+    )
+    (; alpha, alpha0) = dist
+    logp .= Distributions.logpdf.(Distributions.Beta.(alpha, alpha0 .- alpha), x)
+    return logp
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
