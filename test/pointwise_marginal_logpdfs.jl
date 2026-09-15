@@ -14,4 +14,31 @@ using Test
             test_pointwise_marginal_matches_marginal(dist, x)
         end
     end
+
+    @testset "MvNormal" begin
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (3, 4)
+
+            Σ = rand_pdmat(TA{T}, n)
+            dist = MvNormal(randn(T, n), Σ)
+            x = rand(dist)
+            test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+        end
+    end
+
+    @testset "MvNormalCanon" begin
+        @testset for Ar in (Array, DimArray),
+                TA in (PDMat, PDiagMat, ScalMat),
+                T in (Float64, Float32),
+                n in (3, 4)
+
+            J = rand_pdmat(TA{T}, n)
+            μ_c = randn(T, n)
+            dist = MvNormalCanon(μ_c, J)
+            x = rand(MvNormal(μ_c, PDMat(Symmetric(inv(Matrix(J))))))
+            test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+        end
+    end
 end

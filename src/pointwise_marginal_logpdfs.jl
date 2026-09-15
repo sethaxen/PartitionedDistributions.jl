@@ -65,3 +65,27 @@ pointwise_marginal_logpdfs!!
 function pointwise_marginal_logpdfs!!(::Number, dist::Distributions.UnivariateDistribution, x::Number)
     return Distributions.logpdf(dist, x)
 end
+
+# Array-variate normal distributions: elementwise marginals are univariate normals
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.AbstractMvNormal,
+        x::AbstractVector{<:Number},
+    )
+    return _normal_logpdfs!(logp, Distributions.mean(dist), Distributions.var(dist), x)
+end
+# avoid forming the full covariance matrix
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.MvNormalCanon,
+        x::AbstractVector{<:Number},
+    )
+    return _normal_logpdfs!(logp, dist.μ, _pd_diag_inv(dist.J), x)
+end
+
+# Helper functions
+
+# elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
+function _normal_logpdfs!(logp, μ, σ2, x)
+    return @. logp = -(log(σ2) + (x - μ)^2 / σ2 + log2π) / 2
+end
