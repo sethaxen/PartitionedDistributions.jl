@@ -1,0 +1,67 @@
+"""
+    pointwise_marginal_logpdfs(dist, x) -> logp
+
+Compute pointwise marginal log-PDF of `x` for a given distribution.
+
+Returns a collection with the same structure as `x` where each scalar is the
+log-PDF of the marginal distribution of the corresponding element of `x`, evaluated
+at that element.
+
+For array-variate distributions, this is equivalent to
+
+```julia
+[logpdf(marginal(dist, i), x[i]) for i in LinearIndices(x)]
+```
+but is generally much more efficient.
+
+See [`pointwise_marginal_logpdfs!!`](@ref) for a maybe-in-place version.
+
+See also: [`marginal`](@ref), [`pointwise_conditional_logpdfs`](@ref)
+
+# Examples
+
+Here's an example with a multivariate normal distribution:
+
+```jldoctest pointwise_marginal_logpdfs
+julia> using Distributions, PartitionedDistributions
+
+julia> dist = MvNormal([ 0.8, -0.9], [1.3  0.7;  0.7 0.5]);
+
+julia> x = [2.9, 0.4];
+
+julia> pointwise_marginal_logpdfs(dist, x)
+2-element Vector{Float64}:
+ -2.7462745115922638
+ -2.2623649429247
+```
+
+Here's an example with a `NamedTuple`-variate distribution:
+
+```jldoctest pointwise_marginal_logpdfs
+julia> nt_dist = product_distribution((x = dist, y = Normal()));
+
+julia> z = (; x, y=0.7)
+(x = [2.9, 0.4], y = 0.7)
+
+julia> pointwise_marginal_logpdfs(nt_dist, z)
+(x = [-2.7462745115922638, -2.2623649429247], y = -1.1639385332046728)
+```
+"""
+function pointwise_marginal_logpdfs(dist::Distributions.Distribution, x)
+    logp = _similar_logpdf(dist, x)
+    return pointwise_marginal_logpdfs!!(logp, dist, x)
+end
+
+"""
+    pointwise_marginal_logpdfs!!(logp, dist, x) -> logpdfs
+
+Maybe-in-place version of [`pointwise_marginal_logpdfs`](@ref).
+
+If all scalar values in `logp` can be mutated, then `logp`
+is filled in-place and returned. Otherwise, a new collection is returned.
+"""
+pointwise_marginal_logpdfs!!
+
+function pointwise_marginal_logpdfs!!(::Number, dist::Distributions.UnivariateDistribution, x::Number)
+    return Distributions.logpdf(dist, x)
+end

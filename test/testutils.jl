@@ -110,6 +110,42 @@ function test_pointwise_matches_conditional(
     return nothing
 end
 
+"""
+    test_pointwise_marginal_matches_marginal(dist, x; atol, rtol)
+
+For array-variate `dist`, check that `pointwise_marginal_logpdfs` agrees with
+`logpdf(marginal(dist, i), x[i])` for each `i in eachindex(x)`, that
+`axes(logp) == axes(x)`, and that `pointwise_marginal_logpdfs!!` fills its first argument in-place.
+For [`ProductNamedTupleDistribution`](@ref), recurse into each factor (independent blocks).
+"""
+function test_pointwise_marginal_matches_marginal(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        x::AbstractArray{<:Number};
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_marginal_logpdfs(dist, x)
+    @test axes(logp) == axes(x)
+    logp_ref = [logpdf(marginal(dist, i), x[i]) for i in LinearIndices(x)]
+    @test logp ≈ logp_ref rtol = rtol atol = atol
+    logp2 = similar(logp)
+    @test pointwise_marginal_logpdfs!!(logp2, dist, x) === logp2
+    @test logp2 == logp
+    return nothing
+end
+
+function test_pointwise_marginal_matches_marginal(
+        dist::Distributions.Distribution{<:Distributions.Univariate},
+        x::Number;
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_marginal_logpdfs(dist, x)
+    @test logp ≈ logpdf(dist, x) rtol = rtol atol = atol
+    @test pointwise_marginal_logpdfs!!(oftype(logp, NaN), dist, x) == logp
+    return nothing
+end
+
 # for distributions without a working `conditional`
 function test_pointwise_matches_marginal(
         dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},

@@ -14,4 +14,6 @@ marginal
 conditional
 pointwise_conditional_logpdfs
 pointwise_conditional_logpdfs!!
+pointwise_marginal_logpdfs
+pointwise_marginal_logpdfs!!
 ```
