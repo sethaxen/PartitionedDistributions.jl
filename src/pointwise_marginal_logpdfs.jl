@@ -78,9 +78,15 @@ function pointwise_marginal_logpdfs!!(::Number, dist::Distributions.UnivariateDi
     return Distributions.logpdf(dist, x)
 end
 
-# Array-variate normal distributions: elementwise marginals are univariate normals.
-# (For `MvNormal` the generic fallback is just as fast, so only the cases where `marginal`
-# is expensive are specialized.)
+# Array-variate normal distributions: elementwise marginals are univariate normals
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.AbstractMvNormal,
+        x::AbstractVector{<:Number},
+    )
+    return _normal_logpdfs!(logp, Distributions.mean(dist), Distributions.var(dist), x)
+end
+# avoid forming the full covariance matrix
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.MvNormalCanon,
