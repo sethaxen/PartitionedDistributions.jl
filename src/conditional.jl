@@ -208,9 +208,9 @@ function _conditional_impl_row_split(dist::Distributions.MatrixTDist, x::Abstrac
     Σ_cond, B, Σ_ic = _schur_complement_and_factor(Σ, i)
     dX_ic = x_ic - M_ic
     M_cond = M_i + B' * dX_ic
-    Ω_cond = Ω + PDMats.Xt_invA_X(Σ_ic, dX_ic)
+    Ω_cond = _symadd(Ω, PDMats.Xt_invA_X(Σ_ic, dX_ic))
     if iszero(ndims(Σ_cond))
-        return Distributions.MvTDist(ν_cond, vec(M_cond), (Σ_cond / ν_cond) * Ω_cond)
+        return Distributions.GenericMvTDist(ν_cond, vec(M_cond), PDMats.PDMat((Σ_cond / ν_cond) * Ω_cond))
     else
         return Distributions.MatrixTDist(ν_cond, M_cond, Σ_cond, Ω_cond)
     end
@@ -226,9 +226,9 @@ function _conditional_impl_col_split(dist::Distributions.MatrixTDist, x::Abstrac
     Ω_cond, B, Ω_ic = _schur_complement_and_factor(Ω, i)
     dX_ic = x_ic - M_ic
     M_cond = M_i + dX_ic * B
-    Σ_cond = Σ + PDMats.X_invA_Xt(Ω_ic, dX_ic)
+    Σ_cond = _symadd(Σ, PDMats.X_invA_Xt(Ω_ic, dX_ic))
     if iszero(ndims(Ω_cond))
-        return Distributions.MvTDist(ν_cond, vec(M_cond), Σ_cond * (Ω_cond / ν_cond))
+        return Distributions.GenericMvTDist(ν_cond, vec(M_cond), PDMats.PDMat(Σ_cond * (Ω_cond / ν_cond)))
     else
         return Distributions.MatrixTDist(ν_cond, M_cond, Σ_cond, Ω_cond)
     end
