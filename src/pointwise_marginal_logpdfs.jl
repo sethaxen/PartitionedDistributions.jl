@@ -78,15 +78,9 @@ function pointwise_marginal_logpdfs!!(::Number, dist::Distributions.UnivariateDi
     return Distributions.logpdf(dist, x)
 end
 
-# Array-variate normal distributions: elementwise marginals are univariate normals
-function pointwise_marginal_logpdfs!!(
-        logp::AbstractVector{<:Number},
-        dist::Distributions.AbstractMvNormal,
-        x::AbstractVector{<:Number},
-    )
-    return _normal_logpdfs!(logp, Distributions.mean(dist), Distributions.var(dist), x)
-end
-# avoid forming the full covariance matrix
+# Array-variate normal distributions: elementwise marginals are univariate normals.
+# (For `MvNormal` the generic fallback is just as fast, so only the cases where `marginal`
+# is expensive are specialized.)
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.MvNormalCanon,
@@ -102,18 +96,6 @@ function pointwise_marginal_logpdfs!!(
     (; M, U, V) = dist
     σ2 = LinearAlgebra.diag(U) .* LinearAlgebra.diag(V)'
     return _normal_logpdfs!(logp, M, σ2, x)
-end
-
-# Multivariate log-normal distribution
-function pointwise_marginal_logpdfs!!(
-        logp::AbstractVector{<:Number},
-        dist::Distributions.MvLogNormal,
-        x::AbstractVector{<:Number},
-    )
-    logx = log.(x)
-    pointwise_marginal_logpdfs!!(logp, dist.normal, logx)
-    logp .-= logx
-    return logp
 end
 
 # Multivariate t-distribution: elementwise marginals are affine univariate t-distributions
@@ -270,17 +252,6 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
-# Joint order statistics: elementwise marginals are order statistics
-function pointwise_marginal_logpdfs!!(
-        logp::AbstractVector{<:Number},
-        dist::Distributions.JointOrderStatistics,
-        x::AbstractVector{<:Number},
-    )
-    (; n, ranks) = dist
-    logp .= Distributions.logpdf.(Distributions.OrderStatistic.(Ref(dist.dist), n, ranks), x)
-    return logp
-end
-
 # Product distributions: components are independent, so marginalize within each component
 function pointwise_marginal_logpdfs!!(
         logp::AbstractArray{<:Number, N},
@@ -297,16 +268,6 @@ function pointwise_marginal_logpdfs!!(
         end
     end
     return logp
-end
-@static if isdefined(Distributions, :Product)
-    function pointwise_marginal_logpdfs!!(
-            logp::AbstractVector{<:Number},
-            dist::Distributions.Product,
-            x::AbstractVector{<:Number},
-        )
-        logp .= Distributions.logpdf.(dist.v, x)
-        return logp
-    end
 end
 
 # NamedTuple-variate product distributions
