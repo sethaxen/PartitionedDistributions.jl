@@ -101,3 +101,42 @@ function _reshape(  # resolve ambiguity
     }
     return _reshape(dist.dist, ())
 end
+
+# Helpers shared by the pointwise log-pdf functions
+
+function _logpdf_eltype(dist::Distributions.Distribution, x)
+    return typeof(log(one(promote_type(eltype(x), Distributions.partype(dist)))))
+end
+# work around type instability in partype(::AbstractMixtureModel)
+# https://github.com/JuliaStats/Distributions.jl/blob/3d304c26f1cffd6a5bcd24fac2318be92877f4d5/src/mixtures/mixturemodel.jl#L170C41-L170C48
+function _logpdf_eltype(dist::Distributions.AbstractMixtureModel, x::AbstractArray)
+    prob_type = eltype(Distributions.probs(dist))
+    components = Distributions.components(dist)
+    component_type = if isconcretetype(eltype(components))  # all components are the same type
+        _logpdf_eltype(first(components), x)
+    else
+        mapreduce(Base.Fix2(_logpdf_eltype, x), promote_type, components)
+    end
+    return promote_type(component_type, typeof(log(oneunit(prob_type))))
+end
+
+function _similar_logpdf(dist::Distributions.UnivariateDistribution, x::Number)
+    return zero(_logpdf_eltype(dist, x))
+end
+function _similar_logpdf(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate}, x
+    )
+    return similar(x, _logpdf_eltype(dist, x))
+end
+function _similar_logpdf(
+        dist::Distributions.ProductNamedTupleDistribution, x::NamedTuple{K}
+    ) where {K}
+    return map(_similar_logpdf, NamedTuple{K}(dist.dists), x)
+end
+
+# diag(inv(A)) without forming the full inverse
+function _pd_diag_inv(A::PDMats.AbstractPDMat)
+    T = typeof(float(oneunit(eltype(A))))
+    I = LinearAlgebra.Diagonal(ones(T, axes(A, 1)))
+    return PDMats.invquad(A, I)
+end
