@@ -191,6 +191,39 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# Wishart distribution: diagonal entries are scaled χ² (Gamma) distributed, and off-diagonal
+# entries follow a variance-gamma distribution, see
+# https://en.wikipedia.org/wiki/Wishart_distribution#Marginal_distribution_of_matrix_elements
+# The log-density of Xᵢⱼ is written in terms of a = sqrt(Sᵢᵢ Sⱼⱼ) and det₂ = Sᵢᵢ Sⱼⱼ - Sᵢⱼ².
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractMatrix{T},
+        dist::Distributions.Wishart,
+        x::AbstractMatrix{<:Number},
+    ) where {T <: Number}
+    (; df, S) = dist
+    ν = (df - 1) / 2
+    logc = -SpecialFunctions.loggamma(df / 2) - ν * T(logtwo) - T(logπ) / 2
+    for j in axes(x, 2), i in axes(x, 1)
+        xij = x[i, j]
+        Sii, Sjj = S[i, i], S[j, j]
+        if i == j
+            logp[i, j] = Distributions.logpdf(Distributions.Gamma(df / 2, 2 * Sii), xij)
+            continue
+        end
+        Sij = S[i, j]
+        a = sqrt(Sii) * sqrt(Sjj)
+        det2 = (a - Sij) * (a + Sij)
+        logp[i, j] = if iszero(xij)
+            # limit x → 0 of the density below, using K_ν(t) ~ Γ(ν) 2^(ν - 1) t^(-ν)
+            logc + SpecialFunctions.loggamma(ν) + (ν - 1) * T(logtwo) + (ν - 1 // 2) * log(det2) - 2ν * log(a)
+        else
+            t = abs(xij) * a / det2
+            logc + ν * log(abs(xij) / a) + _logbesselk(ν, t) + Sij * xij / det2 - log(det2) / 2
+        end
+    end
+    return logp
+end
+
 # Mixtures of array-variate distributions: the marginal of a mixture is the mixture of the
 # marginals of its components with the same weights.
 function pointwise_marginal_logpdfs!!(

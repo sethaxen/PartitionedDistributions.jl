@@ -379,4 +379,52 @@ using Test
         @test out === logp
         @test out ≈ ref rtol = cbrt(eps(T))
     end
+
+    @testset "Wishart" begin
+        @testset "1 × 1: marginal equals the joint (Gamma)" begin
+            @testset for T in (Float64, Float32), df in (T(0.5), T(3))
+                s = T(0.3) + abs(randn(T))
+                dist = Wishart(df, fill(s, 1, 1))
+                x = rand(dist)
+                logp_ref = fill(logpdf(dist, x), 1, 1)
+                test_pointwise_marginal_matches_reference(dist, x, logp_ref)
+                @test logp_ref[1] ≈ logpdf(Gamma(df / 2, 2 * s), x[1])
+            end
+        end
+        @testset "2 × 2, df = 2, ρ = 0: diagonal Gamma, off-diagonal Laplace" begin
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32)
+                s1, s2 = T(0.3) .+ abs.(randn(T, 2))
+                dist = Wishart(2, PDiagMat([s1, s2]))
+                x = rand(dist)
+                a = sqrt(s1 * s2)
+                logp_ref = [
+                    logpdf(Gamma(1, 2 * s1), x[1, 1]) logpdf(Laplace(0, a), x[1, 2])
+                    logpdf(Laplace(0, a), x[2, 1]) logpdf(Gamma(1, 2 * s2), x[2, 2])
+                ]
+                test_pointwise_marginal_matches_reference(dist, wrap_array(Ar, x), logp_ref)
+            end
+        end
+        @testset "Monte Carlo normalization" begin
+            @testset for p in (2, 3), df in (1, p, 4.5, 3000.0)
+                dist = Wishart(df, rand_pdmat(PDMat{Float64}, p))
+                @test dist.singular == (df <= p - 1)
+                test_pointwise_marginal_mc_normalization(dist, 200_000; atol = 0.03)
+            end
+        end
+        @testset "off-diagonal entry equal to zero" begin
+            dist = Wishart(4.5, rand_pdmat(PDMat{Float64}, 2))
+            x = rand(dist)
+            logp = pointwise_marginal_logpdfs(dist, x)
+            x0 = copy(x)
+            x0[1, 2] = x0[2, 1] = 0
+            logp0 = pointwise_marginal_logpdfs(dist, x0)
+            @test isfinite(logp0[1, 2])
+            @test logp0[1, 1] == logp[1, 1]
+            @testset for δ in (1.0e-8, -1.0e-8)
+                xδ = copy(x0)
+                xδ[1, 2] = xδ[2, 1] = δ
+                @test pointwise_marginal_logpdfs(dist, xδ)[1, 2] ≈ logp0[1, 2] rtol = 1.0e-6
+            end
+        end
+    end
 end

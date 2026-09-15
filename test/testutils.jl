@@ -292,6 +292,47 @@ function logbesseli_recurrence(n::Int, t; extra::Int = 200)
 end
 
 """
+    test_pointwise_marginal_mc_normalization(dist, nsamples; atol, quantile_pairs)
+
+Monte Carlo check of the pointwise marginal densities that only requires `rand(dist)`.
+For `x ~ dist` with marginal density `pᵢ` of `xᵢ` and any interval `[lo, hi]`,
+
+    E[1{lo ≤ xᵢ ≤ hi} / pᵢ(xᵢ)] = hi - lo,
+
+since the expectation is `∫_{lo}^{hi} pᵢ(t) / pᵢ(t) dt`. Draw `nsamples` samples, compute the
+pointwise marginal log-densities, and for every element and every pair of sample quantiles in
+`quantile_pairs` compare the log of the Monte Carlo estimate (via logsumexp) with `log(hi - lo)`.
+Restricting to an interval within the bulk keeps the variance of the estimator finite even when
+`pᵢ` vanishes at the edge of its support; using two different intervals also checks the shape
+of `pᵢ`, not only its normalization.
+"""
+function test_pointwise_marginal_mc_normalization(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        nsamples::Int;
+        atol::Real = 0.02,
+        quantile_pairs = ((0.25, 0.75), (0.005, 0.995)),
+    )
+    x1 = rand(dist)
+    xs = Matrix{eltype(x1)}(undef, length(x1), nsamples)
+    logps = Matrix{Float64}(undef, length(x1), nsamples)
+    for n in 1:nsamples
+        x = n == 1 ? x1 : rand(dist)
+        xs[:, n] = vec(x)
+        logps[:, n] = vec(pointwise_marginal_logpdfs(dist, x))
+    end
+    @test all(isfinite, logps)
+    @testset for i in 1:length(x1), (ql, qh) in quantile_pairs
+        xi = view(xs, i, :)
+        lo, hi = quantile(xi, (ql, qh))
+        v = [-logps[i, n] for n in 1:nsamples if lo <= xi[n] <= hi]
+        vmax = maximum(v)
+        logest = vmax + log(sum(exp, v .- vmax)) - log(nsamples)
+        @test logest ≈ log(hi - lo) atol = atol
+    end
+    return nothing
+end
+
+"""
     test_marginal_moments_match(dist, inds...; test_var::Bool=true, test_cov::Bool=false)
 
 Test that moments of `marginal(dist, inds...)` match slices of the moments of `dist`.
