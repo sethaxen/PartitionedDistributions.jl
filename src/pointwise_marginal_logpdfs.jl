@@ -146,6 +146,17 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# Dirichlet-multinomial distribution: elementwise marginals are BetaBinomial distributions
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.DirichletMultinomial,
+        x::AbstractVector{<:Number},
+    )
+    (; n, α, α0) = dist
+    logp .= Distributions.logpdf.(Distributions.BetaBinomial.(n, α, α0 .- α), x)
+    return logp
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x

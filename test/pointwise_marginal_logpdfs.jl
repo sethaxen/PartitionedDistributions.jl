@@ -142,4 +142,24 @@ using Test
             end
         end
     end
+
+    @testset "DirichletMultinomial" begin
+        @testset "2 categories: marginals equal the joint" begin
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32)
+                dist = DirichletMultinomial(10, T(0.5) .+ 3 * rand(T, 2))
+                x = rand(dist)
+                logp_ref = fill(logpdf(dist, x), 2)
+                test_pointwise_marginal_matches_reference(dist, wrap_array(Ar, x), logp_ref)
+            end
+        end
+        @testset "3 categories: marginals match exhaustive summation" begin
+            @testset for T in (Float64, Float32)
+                dist = DirichletMultinomial(8, T(0.5) .+ 3 * rand(T, 3))
+                x = rand(dist)
+                logp_ref = [enumerated_marginal_logpdf(dist, x, i) for i in 1:3]
+                test_pointwise_marginal_matches_reference(dist, x, logp_ref)
+                @test eltype(pointwise_marginal_logpdfs(dist, x)) === T
+            end
+        end
+    end
 end
