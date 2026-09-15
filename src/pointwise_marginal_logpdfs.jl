@@ -62,6 +62,18 @@ is filled in-place and returned. Otherwise, a new collection is returned.
 """
 pointwise_marginal_logpdfs!!
 
+# inefficient fallback for array-variate distributions
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractArray{<:Number, N},
+        dist::Distributions.Distribution{Distributions.ArrayLikeVariate{N}},
+        x::AbstractArray{<:Number, N},
+    ) where {N}
+    map!(logp, eachindex(x)) do i
+        return Distributions.logpdf(marginal(dist, i), x[i])
+    end
+    return logp
+end
+
 function pointwise_marginal_logpdfs!!(::Number, dist::Distributions.UnivariateDistribution, x::Number)
     return Distributions.logpdf(dist, x)
 end

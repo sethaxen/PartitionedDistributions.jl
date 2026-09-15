@@ -354,4 +354,29 @@ using Test
             end
         end
     end
+
+    @testset "generic array-variate fallback using invoke" begin
+        T = Float64
+        m, n = 2, 3
+        M = randn(T, m, n)
+        U = rand_pdmat(PDMat{T}, m)
+        V = rand_pdmat(PDMat{T}, n)
+        dist = MatrixNormal(M, U, V)
+        x = rand(dist)
+        logp = similar(x, T)
+        ref = pointwise_marginal_logpdfs(dist, x)
+        out = invoke(
+            pointwise_marginal_logpdfs!!,
+            Tuple{
+                AbstractMatrix{T},
+                Distributions.Distribution{Distributions.ArrayLikeVariate{2}},
+                AbstractMatrix{T},
+            },
+            logp,
+            dist,
+            x,
+        )
+        @test out === logp
+        @test out ≈ ref rtol = cbrt(eps(T))
+    end
 end
