@@ -135,6 +135,17 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# Multinomial distribution: elementwise marginals are Binomial distributions
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.Multinomial,
+        x::AbstractVector{<:Number},
+    )
+    (; n, p) = dist
+    logp .= Distributions.logpdf.(Distributions.Binomial.(n, p), x)
+    return logp
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x

@@ -205,6 +205,30 @@ function numerical_marginal_logpdf(dist::Dirichlet, x::AbstractVector, i::Int; n
 end
 
 """
+    enumerated_marginal_logpdf(dist, x, i) -> Float64
+
+Log-pmf of the marginal of the `i`th element of a 3-category `Multinomial` or
+`DirichletMultinomial`, evaluated at `x[i]`, computed by summing the joint pmf over all
+configurations of the other two counts. Used as an implementation-independent reference.
+"""
+function enumerated_marginal_logpdf(
+        dist::Union{Multinomial, DirichletMultinomial}, x::AbstractVector, i::Int,
+    )
+    length(dist) == 3 || throw(ArgumentError("only 3-category distributions are supported"))
+    j, k = filter(!=(i), 1:3)
+    r = dist.n - x[i]
+    y = zeros(Int, 3)
+    y[i] = x[i]
+    lps = map(0:r) do t
+        y[j] = t
+        y[k] = r - t
+        return logpdf(dist, y)
+    end
+    lmax = maximum(lps)
+    return lmax + log(sum(lp -> exp(lp - lmax), lps))
+end
+
+"""
     test_marginal_moments_match(dist, inds...; test_var::Bool=true, test_cov::Bool=false)
 
 Test that moments of `marginal(dist, inds...)` match slices of the moments of `dist`.
