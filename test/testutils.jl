@@ -292,25 +292,28 @@ function logbesseli_recurrence(n::Int, t; extra::Int = 200)
 end
 
 """
-    test_pointwise_marginal_mc_normalization(dist, nsamples; atol, quantile_pairs)
+    test_pointwise_marginal_mc_normalization(dist, nsamples; references, atol)
 
-Monte Carlo check of the pointwise marginal densities that only requires `rand(dist)`.
-For `x ~ dist` with marginal density `pᵢ` of `xᵢ` and any interval `[lo, hi]`,
+Importance-sampling check of the pointwise marginal densities that only requires `rand(dist)`.
+For `x ~ dist` with marginal density `pᵢ` of `xᵢ` and any density `fᵢ` whose support is contained
+in that of `pᵢ`,
 
-    E[1{lo ≤ xᵢ ≤ hi} / pᵢ(xᵢ)] = hi - lo,
+    E[fᵢ(xᵢ) / pᵢ(xᵢ)] = ∫ fᵢ(t) dt = 1.
 
-since the expectation is `∫_{lo}^{hi} pᵢ(t) / pᵢ(t) dt`. Draw `nsamples` samples, compute the
-pointwise marginal log-densities, and for every element and every pair of sample quantiles in
-`quantile_pairs` compare the log of the Monte Carlo estimate (via logsumexp) with `log(hi - lo)`.
-Restricting to an interval within the bulk keeps the variance of the estimator finite even when
-`pᵢ` vanishes at the edge of its support; using two different intervals also checks the shape
-of `pᵢ`, not only its normalization.
+Draw `nsamples` samples, compute the pointwise marginal log-densities, and for every element `i`
+and every `ref` in `references` — a function mapping the linear index `i` and the samples of `xᵢ`
+to a `UnivariateDistribution` `fᵢ` — compare the log of the Monte Carlo estimate (via logsumexp)
+with 0. This is importance sampling with proposal `pᵢ`, so `fᵢ` must be chosen such that the
+weights `fᵢ / pᵢ` are bounded and moderate. The default references are uniform distributions on
+two central quantile intervals, for which the weights are at most about `pᵢ(center) / pᵢ(edge)`
+whatever the support or tails of `pᵢ`; the wider interval is also sensitive to errors in the
+shape of `pᵢ`, not only in its normalization.
 """
 function test_pointwise_marginal_mc_normalization(
         dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
         nsamples::Int;
+        references = default_mc_references,
         atol::Real = 0.02,
-        quantile_pairs = ((0.25, 0.75), (0.005, 0.995)),
     )
     x1 = rand(dist)
     xs = Matrix{eltype(x1)}(undef, length(x1), nsamples)
@@ -321,16 +324,29 @@ function test_pointwise_marginal_mc_normalization(
         logps[:, n] = vec(pointwise_marginal_logpdfs(dist, x))
     end
     @test all(isfinite, logps)
-    @testset for i in 1:length(x1), (ql, qh) in quantile_pairs
+    @testset for i in 1:length(x1), ref in references
         xi = view(xs, i, :)
-        lo, hi = quantile(xi, (ql, qh))
-        v = [-logps[i, n] for n in 1:nsamples if lo <= xi[n] <= hi]
+        f = ref(i, xi)
+        v = [logpdf(f, xi[n]) - logps[i, n] for n in 1:nsamples]
         vmax = maximum(v)
         logest = vmax + log(sum(exp, v .- vmax)) - log(nsamples)
-        @test logest ≈ log(hi - lo) atol = atol
+        @test logest ≈ 0 atol = atol
     end
     return nothing
 end
+
+"""
+    uniform_between_quantiles(ql, qh) -> (i, samples) -> Uniform
+
+Reference builder for [`test_pointwise_marginal_mc_normalization`](@ref): the uniform
+distribution between the `ql` and `qh` sample quantiles.
+"""
+uniform_between_quantiles(ql, qh) = (_, xi) -> Uniform(quantile(xi, (ql, qh))...)
+
+const default_mc_references = (
+    uniform_between_quantiles(0.25, 0.75),
+    uniform_between_quantiles(0.005, 0.995),
+)
 
 """
     test_marginal_moments_match(dist, inds...; test_var::Bool=true, test_cov::Bool=false)
