@@ -254,4 +254,45 @@ using Test
             test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
         end
     end
+
+    @testset "ProductDistribution" begin
+        @testset "ProductDistribution (multivariate components)" begin
+            @testset for Ar in (Array, DimArray),
+                    TA in (PDMat, PDiagMat, ScalMat),
+                    T in (Float64, Float32),
+                    d in (3, 4)
+
+                Σ = rand_pdmat(TA{T}, d)
+                comp_dists = [MvNormal(randn(T, d), Σ) for _ in 1:3]
+                dist = product_distribution(comp_dists)
+                x = rand(dist)
+                test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+            end
+        end
+
+        @testset "ProductDistribution (scalar components, M == 0)" begin
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32), sz in ((5,), (2, 3))
+                ax = map(Base.OneTo, sz)
+                factors = map(Iterators.product(ax...)) do _
+                    Normal(randn(T), abs(randn(T)))
+                end
+                # currently, calling product_distribution might produce a Product
+                dist = Distributions.ProductDistribution(factors)
+                x = rand(dist)
+                test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+            end
+        end
+    end
+
+    if isdefined(Distributions, :Product)
+        @testset "Product (univariate factors)" begin
+            @testset for Ar in (Array, DimArray), T in (Float64, Float32)
+                dist = Distributions.Product(
+                    [Normal(randn(T), T(0.3) + abs(randn(T))) for _ in 1:7],
+                )
+                x = rand(dist)
+                test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+            end
+        end
+    end
 end

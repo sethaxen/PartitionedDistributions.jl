@@ -208,6 +208,34 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# Product distributions: components are independent, so marginalize within each component
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractArray{<:Number, N},
+        dist::Distributions.ProductDistribution{N, M},
+        x::AbstractArray{<:Number, N},
+    ) where {N, M}
+    if M == 0
+        logp .= Distributions.logpdf.(dist.dists, x)
+    else
+        dims = ntuple(i -> i + M, Val(N - M))  # product dimensions
+        for (x_i, logp_i, dist_i) in
+            zip(eachslice(x; dims), eachslice(logp; dims), dist.dists)
+            pointwise_marginal_logpdfs!!(logp_i, dist_i, x_i)
+        end
+    end
+    return logp
+end
+@static if isdefined(Distributions, :Product)
+    function pointwise_marginal_logpdfs!!(
+            logp::AbstractVector{<:Number},
+            dist::Distributions.Product,
+            x::AbstractVector{<:Number},
+        )
+        logp .= Distributions.logpdf.(dist.v, x)
+        return logp
+    end
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
