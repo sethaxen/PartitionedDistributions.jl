@@ -5,6 +5,7 @@ using LinearAlgebra
 using PDMats: PDMat, PDiagMat, ScalMat
 using PartitionedDistributions
 using Random
+using SpecialFunctions: besselix, besselkx
 using Test
 
 """
@@ -251,6 +252,43 @@ function enumerated_marginal_logpdf(
     end
     lmax = maximum(lps)
     return lmax + log(sum(lp -> exp(lp - lmax), lps))
+end
+
+"""
+    logbesselk_recurrence(n::Int, t) -> Float64
+
+`log(besselk(n, t))` for integer order `n ≥ 0`, computed in log-space from `K_0` and `K_1` with
+the (forward-stable) recurrence `K_{n+1}(t) = K_{n-1}(t) + (2n / t) K_n(t)`.
+Used as an implementation-independent reference for large orders.
+"""
+function logbesselk_recurrence(n::Int, t)
+    lk = log(besselkx(0.0, t)) - t
+    n == 0 && return lk
+    r = besselkx(1.0, t) / besselkx(0.0, t)  # K_1 / K_0
+    for m in 1:n
+        lk += log(r)  # log K_m
+        m == n && break
+        r = 1 / r + 2m / t  # K_{m+1} / K_m
+    end
+    return lk
+end
+
+"""
+    logbesseli_recurrence(n::Int, t) -> Float64
+
+`log(besseli(n, t))` for integer order `n ≥ 0`, computed in log-space from `I_0` with the
+ratios `I_{m+1} / I_m` obtained by (backward-stable) Miller recurrence.
+Used as an implementation-independent reference for large orders.
+"""
+function logbesseli_recurrence(n::Int, t; extra::Int = 200)
+    nmax = n + extra + ceil(Int, t)
+    r = 0.0  # I_{nmax+1} / I_{nmax} ≈ 0
+    logratios = 0.0
+    for m in nmax:-1:1
+        r = 1 / (2m / t + r)  # I_m / I_{m-1}
+        m <= n && (logratios += log(r))
+    end
+    return log(besselix(0.0, t)) + t + logratios
 end
 
 """

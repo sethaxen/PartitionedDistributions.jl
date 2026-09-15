@@ -161,4 +161,50 @@ index_complement(n::Int, i) = setdiff(1:n, i)
         @test PartitionedDistributions._reshape(rudist2, ()) === rudist2
         @test PartitionedDistributions._reshape(rudist2, (1, 1)) === reshape(mv1dist, (1, 1))
     end
+
+    @testset "_logbesseli / _logbesselk" begin
+        logbesseli = PartitionedDistributions._logbesseli
+        logbesselk = PartitionedDistributions._logbesselk
+        ts = exp10.(range(-3, 3; length = 25))
+        @testset "small orders match the scaled library functions" begin
+            @testset for ν in (0.0, 0.5, 1.0, 2.5, 9.5), t in ts
+                @test logbesseli(ν, t) ≈ log(besselix(ν, t)) + t
+                @test logbesselk(ν, t) ≈ log(besselkx(ν, t)) - t
+            end
+            @testset "negative orders (I only)" begin
+                @testset for ν in (-0.5,), t in ts
+                    @test logbesseli(ν, t) ≈ log(besselix(ν, t)) + t
+                end
+            end
+        end
+        @testset "large orders match exact recurrences" begin
+            # includes regimes where besselix underflows and besselkx overflows
+            @testset for n in (10, 25, 60, 150, 500, 1000), t in (0.05, 1.0, 30.0, 900.0)
+                @test logbesseli(n, t) ≈ logbesseli_recurrence(n, t) rtol = 1.0e-6
+                @test logbesselk(n, t) ≈ logbesselk_recurrence(n, t) rtol = 1.0e-6
+            end
+        end
+        @testset "smooth in the order across the library/asymptotic switch" begin
+            # the switch happens where the scaled library value would leave (-690, 690);
+            # a jump there would show up in the third differences over ν, which are otherwise
+            # of order h³ / ν² ≈ 3e-6
+            t = 0.01
+            νs = 74:0.25:86
+            lki = [logbesselk(ν, t) for ν in νs]
+            lii = [logbesseli(ν, t) for ν in νs]
+            @test minimum(lki .+ t) < 690 < maximum(lki .+ t)
+            @test minimum(lii .- t) < -690 < maximum(lii .- t)
+            @test all(diff(lki) .> 0)
+            @test all(diff(lii) .< 0)
+            @test maximum(abs, diff(diff(diff(lki)))) < 1.0e-5
+            @test maximum(abs, diff(diff(diff(lii)))) < 1.0e-5
+        end
+        @testset "argument types" begin
+            @test logbesseli(2.5f0, 3.0f0) isa Float32
+            @test logbesselk(2.5f0, 3.0f0) isa Float32
+            @test logbesseli(2, 3) isa Float64
+            @test logbesselk(200.0f0, 1.0f0) ≈ logbesselk_recurrence(200, 1.0)
+            @test logbesseli(200.0f0, 1.0f0) ≈ logbesseli_recurrence(200, 1.0)
+        end
+    end
 end
