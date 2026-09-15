@@ -241,4 +241,17 @@ using Test
             test_pointwise_marginal_matches_marginal(mix_mn, wrap_array(Ar, x))
         end
     end
+
+    @testset "JointOrderStatistics" begin
+        @testset for Ar in (Array, DimArray),
+                T in (Float64, Float32),
+                udist in [Normal(rand(T)...), Beta(rand(T)...)],
+                n in (10, 20),
+                ranks in (sort(shuffle(1:n)[1:5]), 1:n, [1, n], [n ÷ 2])
+
+            dist = JointOrderStatistics(udist, n, ranks)
+            x = rand(dist)
+            test_pointwise_marginal_matches_marginal(dist, wrap_array(Ar, x))
+        end
+    end
 end

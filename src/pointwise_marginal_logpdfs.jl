@@ -197,6 +197,17 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
+# Joint order statistics: elementwise marginals are order statistics
+function pointwise_marginal_logpdfs!!(
+        logp::AbstractVector{<:Number},
+        dist::Distributions.JointOrderStatistics,
+        x::AbstractVector{<:Number},
+    )
+    (; n, ranks) = dist
+    logp .= Distributions.logpdf.(Distributions.OrderStatistic.(Ref(dist.dist), n, ranks), x)
+    return logp
+end
+
 # Helper functions
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
