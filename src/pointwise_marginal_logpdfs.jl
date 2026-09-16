@@ -85,8 +85,8 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractVector{<:Number},
     )
     μ = Distributions.mean(dist)
-    σ = sqrt.(Distributions.var(dist))
-    logp .= Distributions.logpdf.(Distributions.Normal.(μ, σ; check_args = false), x)
+    v = Distributions.var(dist)
+    @. logp = Distributions.logpdf(Distributions.Normal(μ, sqrt(v); check_args = false), x)
     return logp
 end
 # avoid forming the full covariance matrix
@@ -95,8 +95,9 @@ function pointwise_marginal_logpdfs!!(
         dist::Distributions.MvNormalCanon,
         x::AbstractVector{<:Number},
     )
-    σ = sqrt.(_pd_diag_inv(dist.J))
-    logp .= Distributions.logpdf.(Distributions.Normal.(dist.μ, σ; check_args = false), x)
+    (; μ, J) = dist
+    v = _pd_diag_inv(J)
+    @. logp = Distributions.logpdf(Distributions.Normal(μ, sqrt(v); check_args = false), x)
     return logp
 end
 function pointwise_marginal_logpdfs!!(
@@ -105,9 +106,12 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractMatrix{<:Number},
     )
     (; M, U, V) = dist
-    σU = sqrt.(LinearAlgebra.diag(U))
-    σV = sqrt.(LinearAlgebra.diag(V))
-    logp .= Distributions.logpdf.(Distributions.Normal.(M, σU .* σV'; check_args = false), x)
+    vU = LinearAlgebra.diag(U)
+    vV = LinearAlgebra.diag(V)
+    logp .= Distributions.logpdf.(
+        Distributions.Normal.(M, sqrt.(vU) .* sqrt.(vV'); check_args = false),
+        x,
+    )
     return logp
 end
 
@@ -120,11 +124,11 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractVector{<:Number},
     ) where {T <: Number}
     (; μ, Σ) = dist
-    ν = dist.df
-    α = (ν + 1) / 2
-    logc = _tdist_lognorm(T, ν)
-    σ = sqrt.(LinearAlgebra.diag(Σ))
-    return @. logp = logc - α * log1p(((x - μ) / σ)^2 / ν) - log(σ)
+    ν = T(dist.df)
+    α = T(ν + 1) / 2
+    logc = _tdist_lognorm(ν)
+    v = LinearAlgebra.diag(Σ)
+    return @. logp = logc - α * log1p(((x - μ) / sqrt(v))^2 / ν) - log(v) / 2
 end
 
 # Matrix-variate t-distribution
@@ -133,12 +137,13 @@ function pointwise_marginal_logpdfs!!(
         dist::Distributions.MatrixTDist,
         x::AbstractMatrix{<:Number},
     ) where {T <: Number}
-    (; ν, M, Σ, Ω) = dist
-    α = (ν + 1) / 2
-    logc = _tdist_lognorm(T, ν)
-    σΣ = sqrt.(LinearAlgebra.diag(Σ))
-    σΩ = sqrt.(LinearAlgebra.diag(Ω)) ./ sqrt(ν)
-    return @. logp = logc - α * log1p(((x - M) / (σΣ * σΩ'))^2 / ν) - log(σΣ * σΩ')
+    (; M, Σ, Ω) = dist
+    ν = T(dist.ν)
+    α = T(ν + 1) / 2
+    logc = _tdist_lognorm(ν) + log(ν) / 2
+    vΣ = LinearAlgebra.diag(Σ)
+    vΩ = LinearAlgebra.diag(Ω)
+    return @. logp = logc - α * log1p(((x - M) / (sqrt(vΣ) * sqrt(vΩ')))^2) - (log(vΣ) + log(vΩ')) / 2
 end
 
 # Dirichlet distribution: elementwise marginals are Beta distributions
@@ -148,7 +153,7 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractVector{<:Number},
     )
     (; alpha, alpha0) = dist
-    logp .= Distributions.logpdf.(Distributions.Beta.(alpha, alpha0 .- alpha; check_args = false), x)
+    @. logp = Distributions.logpdf(Distributions.Beta(alpha, alpha0 - alpha; check_args = false), x)
     return logp
 end
 
@@ -159,7 +164,7 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractVector{<:Number},
     )
     (; n, p) = dist
-    logp .= Distributions.logpdf.(Distributions.Binomial.(n, p; check_args = false), x)
+    @. logp = Distributions.logpdf(Distributions.Binomial(n, p; check_args = false), x)
     return logp
 end
 
@@ -170,7 +175,7 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractVector{<:Number},
     )
     (; n, α, α0) = dist
-    logp .= Distributions.logpdf.(Distributions.BetaBinomial.(n, α, α0 .- α; check_args = false), x)
+    @. logp = Distributions.logpdf(Distributions.BetaBinomial(n, α, α0 - α; check_args = false), x)
     return logp
 end
 
@@ -185,13 +190,9 @@ function pointwise_marginal_logpdfs!!(
     (; d, η) = dist
     a = η - 1 + d / 2
     beta = Distributions.Beta(a, a; check_args = false)
-    for j in axes(x, 2), i in axes(x, 1)
-        r = x[i, j]
-        logp[i, j] = if i == j
-            isone(r) ? zero(T) : T(-Inf)
-        else
-            Distributions.logpdf(beta, (r + 1) / 2) - T(logtwo)
-        end
+    @. logp = Distributions.logpdf(beta, (x + 1) / 2) - logtwo
+    for (il, ix) in zip(LinearAlgebra.diagind(logp), LinearAlgebra.diagind(x))
+        logp[il] = isone(x[ix]) ? zero(T) : T(-Inf)
     end
     return logp
 end
@@ -205,25 +206,27 @@ function pointwise_marginal_logpdfs!!(
         dist::Distributions.Wishart,
         x::AbstractMatrix{<:Number},
     ) where {T <: Number}
-    (; df, S) = dist
+    (; S) = dist
+    df = T(dist.df)
     ν = (df - 1) / 2
-    logc = -SpecialFunctions.loggamma(df / 2) - ν * T(logtwo) - T(logπ) / 2
+    logc = -SpecialFunctions.loggamma(df / 2) - ν * logtwo - T(logπ) / 2
+    sd = sqrt.(LinearAlgebra.diag(S))
     for j in axes(x, 2), i in axes(x, 1)
         xij = x[i, j]
-        Sii, Sjj = S[i, i], S[j, j]
         if i == j
-            logp[i, j] = Distributions.logpdf(Distributions.Gamma(df / 2, 2 * Sii; check_args = false), xij)
+            gamma = Distributions.Gamma(df / 2, 2 * S[i, i]; check_args = false)
+            logp[i, j] = Distributions.logpdf(gamma, xij)
             continue
         end
+        a = sd[i] * sd[j]
         Sij = S[i, j]
-        a = sqrt(Sii) * sqrt(Sjj)
         det2 = (a - Sij) * (a + Sij)
-        logp[i, j] = if iszero(xij)
+        logp[i, j] = logc + if iszero(xij)
             # limit x → 0 of the density below, using K_ν(t) ~ Γ(ν) 2^(ν - 1) t^(-ν)
-            logc + SpecialFunctions.loggamma(ν) + (ν - 1) * T(logtwo) + (ν - 1 // 2) * log(det2) - 2ν * log(a)
+            SpecialFunctions.loggamma(ν) + (ν - 1) * logtwo + (ν - 1 // 2) * log(det2) - 2ν * log(a)
         else
             t = abs(xij) * a / det2
-            logc + ν * log(abs(xij) / a) + _logbesselk(ν, t) + Sij * xij / det2 - log(det2) / 2
+            ν * log(abs(xij) / a) + _logbesselk(ν, t) + Sij * xij / det2 - log(det2) / 2
         end
     end
     return logp
@@ -241,19 +244,21 @@ function pointwise_marginal_logpdfs!!(
     ) where {T <: Number}
     (; μ, κ) = dist
     D = length(μ)
-    ν = (D - 3) / 2
+    Dlower = D - 1
+    ν = T(D // 2 - 1)
+    νlower = T(Dlower // 2 - 1)
     # log C_D(κ) + (D - 1) / 2 * log(2π)
-    logc = (D / 2 - 1) * log(κ) - T(log2π) / 2 - _logbesseli(D / 2 - 1, κ)
-    logp .= _vmf_marginal_logpdf.(logc, κ, ν, μ, x)
+    logc = ν * log(κ) - T(log2π) / 2 - _logbesseli(ν, κ)
+    logp .= _vmf_marginal_logpdf.(logc, κ, νlower, μ, x)
     return logp
 end
 function _vmf_marginal_logpdf(logc, κ, ν, μi, xi)
     abs(xi) <= 1 || return oftype(logc, -Inf)
     xi2c = (1 - xi) * (1 + xi)  # 1 - xᵢ², accurate near |xᵢ| = 1
     μi2c = max(zero(μi), (1 - μi) * (1 + μi))  # guard against rounding of the unit vector μ
-    s = κ * sqrt(μi2c * xi2c)
+    s = κ * sqrt(μi2c) * sqrt(xi2c)
     # (1 - xᵢ²)^ν, avoiding 0 * -Inf for D == 3 at |xᵢ| == 1
-    logjac = iszero(ν) ? zero(logc) : ν * log(xi2c)
+    logjac = LogExpFunctions.xlogy(ν, xi2c)
     return logc + κ * μi * xi + logjac + _logbesseli_over_power(ν, s)
 end
 
@@ -322,8 +327,12 @@ end
 # Helper functions
 
 # log normalization constant of the standard t-distribution with ν degrees of freedom
-function _tdist_lognorm(::Type{T}, ν) where {T}
-    return SpecialFunctions.loggamma((ν + 1) / 2) - SpecialFunctions.loggamma(ν / 2) - (log(ν) + T(logπ)) / 2
+function _tdist_lognorm(ν)
+    return (
+        SpecialFunctions.loggamma((ν + 1) / 2) -
+        SpecialFunctions.loggamma(ν / 2) -
+        (log(ν) + logπ) / 2
+    )
 end
 
 # log(I_ν(s) / s^ν), which is finite as s → 0
