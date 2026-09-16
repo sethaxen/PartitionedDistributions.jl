@@ -131,7 +131,7 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractVector{<:Number},
     )
     (; alpha, alpha0) = dist
-    logp .= Distributions.logpdf.(Distributions.Beta.(alpha, alpha0 .- alpha), x)
+    logp .= Distributions.logpdf.(Distributions.Beta.(alpha, alpha0 .- alpha; check_args = false), x)
     return logp
 end
 
@@ -142,7 +142,7 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractVector{<:Number},
     )
     (; n, p) = dist
-    logp .= Distributions.logpdf.(Distributions.Binomial.(n, p), x)
+    logp .= Distributions.logpdf.(Distributions.Binomial.(n, p; check_args = false), x)
     return logp
 end
 
@@ -153,7 +153,7 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractVector{<:Number},
     )
     (; n, α, α0) = dist
-    logp .= Distributions.logpdf.(Distributions.BetaBinomial.(n, α, α0 .- α), x)
+    logp .= Distributions.logpdf.(Distributions.BetaBinomial.(n, α, α0 .- α; check_args = false), x)
     return logp
 end
 
@@ -167,7 +167,7 @@ function pointwise_marginal_logpdfs!!(
     ) where {T <: Number}
     (; d, η) = dist
     a = η - 1 + d / 2
-    beta = Distributions.Beta(a, a)
+    beta = Distributions.Beta(a, a; check_args = false)
     for j in axes(x, 2), i in axes(x, 1)
         r = x[i, j]
         logp[i, j] = if i == j
@@ -195,7 +195,7 @@ function pointwise_marginal_logpdfs!!(
         xij = x[i, j]
         Sii, Sjj = S[i, i], S[j, j]
         if i == j
-            logp[i, j] = Distributions.logpdf(Distributions.Gamma(df / 2, 2 * Sii), xij)
+            logp[i, j] = Distributions.logpdf(Distributions.Gamma(df / 2, 2 * Sii; check_args = false), xij)
             continue
         end
         Sij = S[i, j]
@@ -306,10 +306,12 @@ end
 
 # elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
 function _normal_logpdfs!(logp, μ, σ2, x)
-    return @. logp = -(log(σ2) + (x - μ)^2 / σ2 + log2π) / 2
+    logp .= Distributions.logpdf.(Distributions.Normal.(μ, sqrt.(σ2); check_args = false), x)
+    return logp
 end
 
-# elementwise log-pdf of μ + sqrt(σ2) * TDist(ν) at x
+# elementwise log-pdf of μ + sqrt(σ2) * TDist(ν) at x, with the normalization constant
+# (two loggamma evaluations) hoisted out of the elementwise loop
 function _tdist_logpdfs!(logp::AbstractArray{T}, ν, μ, σ2, x) where {T}
     α = (ν + 1) / 2
     logc = SpecialFunctions.loggamma(α) - SpecialFunctions.loggamma(ν / 2) - (log(ν) + T(logπ)) / 2
