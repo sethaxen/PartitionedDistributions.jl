@@ -408,7 +408,7 @@ using Test
             @testset for p in (2, 3), df in (1, p, 4.5, 3000.0)
                 dist = Wishart(df, rand_pdmat(PDMat{Float64}, p))
                 @test dist.singular == (df <= p - 1)
-                test_pointwise_marginal_mc_normalization(dist, 200_000; atol = 0.03)
+                test_pointwise_marginal_mc_normalization(dist, 200_000)
             end
         end
         @testset "off-diagonal entry equal to zero" begin
@@ -468,7 +468,7 @@ using Test
         @testset "Monte Carlo normalization" begin
             @testset for D in (3, 4, 6, 10), κ in (0.5, 5.0, 40.0)
                 dist = VonMisesFisher(normalize(randn(D)), κ)
-                test_pointwise_marginal_mc_normalization(dist, 200_000; atol = 0.03)
+                test_pointwise_marginal_mc_normalization(dist, 200_000)
             end
         end
         @testset "large D and small κ, where the cached normalizing constant overflows" begin
@@ -478,9 +478,9 @@ using Test
             # the sampler returns NaN for large D in Distributions < 0.25.123, so the Monte
             # Carlo check can only run where sampling works
             if all(isfinite, rand(dist))
-                test_pointwise_marginal_mc_normalization(dist, 20_000; atol = 0.05)
+                test_pointwise_marginal_mc_normalization(dist, 20_000)
             else
-                @test_skip test_pointwise_marginal_mc_normalization(dist, 20_000; atol = 0.05)
+                @test_skip test_pointwise_marginal_mc_normalization(dist, 20_000)
             end
         end
     end
