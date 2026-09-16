@@ -388,7 +388,7 @@ using Test
                 x = rand(dist)
                 logp_ref = fill(logpdf(dist, x), 1, 1)
                 test_pointwise_marginal_matches_reference(dist, x, logp_ref)
-                @test logp_ref[1] ≈ logpdf(Gamma(df / 2, 2 * s), x[1])
+                @test logp_ref[1] ≈ logpdf(Gamma(df / 2, 2 * s), x[1]) rtol = default_rtol(dist, 0)
             end
         end
         @testset "2 × 2, df = 2, ρ = 0: diagonal Gamma, off-diagonal Laplace" begin

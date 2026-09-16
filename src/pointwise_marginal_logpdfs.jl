@@ -120,7 +120,7 @@ function pointwise_marginal_logpdfs!!(
     ) where {T <: Number}
     (; μ, Σ) = dist
     ν = T(dist.df)
-    α = T(ν + 1) / 2
+    α = (ν + 1) / 2
     logc = _tdist_lognorm(ν)
     v = LinearAlgebra.diag(Σ)
     return @. logp = logc - α * log1p(((x - μ) / sqrt(v))^2 / ν) - log(v) / 2
@@ -133,7 +133,7 @@ function pointwise_marginal_logpdfs!!(
     ) where {T <: Number}
     (; M, Σ, Ω) = dist
     ν = T(dist.ν)
-    α = T(ν + 1) / 2
+    α = (ν + 1) / 2
     logc = _tdist_lognorm(ν) + log(ν) / 2
     vΣ = LinearAlgebra.diag(Σ)
     vΩ = LinearAlgebra.diag(Ω)
@@ -329,8 +329,8 @@ end
 function _tdist_lognorm(ν)
     return (
         SpecialFunctions.loggamma((ν + 1) / 2) -
-        SpecialFunctions.loggamma(ν / 2) -
-        (log(ν) + logπ) / 2
+            SpecialFunctions.loggamma(ν / 2) -
+            (log(ν) + logπ) / 2
     )
 end
 
