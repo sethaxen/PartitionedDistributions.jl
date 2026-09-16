@@ -84,7 +84,10 @@ function pointwise_marginal_logpdfs!!(
         dist::Distributions.AbstractMvNormal,
         x::AbstractVector{<:Number},
     )
-    return _normal_logpdfs!(logp, Distributions.mean(dist), Distributions.var(dist), x)
+    μ = Distributions.mean(dist)
+    σ = sqrt.(Distributions.var(dist))
+    logp .= Distributions.logpdf.(Distributions.Normal.(μ, σ; check_args = false), x)
+    return logp
 end
 # avoid forming the full covariance matrix
 function pointwise_marginal_logpdfs!!(
@@ -92,7 +95,9 @@ function pointwise_marginal_logpdfs!!(
         dist::Distributions.MvNormalCanon,
         x::AbstractVector{<:Number},
     )
-    return _normal_logpdfs!(logp, dist.μ, _pd_diag_inv(dist.J), x)
+    σ = sqrt.(_pd_diag_inv(dist.J))
+    logp .= Distributions.logpdf.(Distributions.Normal.(dist.μ, σ; check_args = false), x)
+    return logp
 end
 function pointwise_marginal_logpdfs!!(
         logp::AbstractMatrix{<:Number},
@@ -100,28 +105,40 @@ function pointwise_marginal_logpdfs!!(
         x::AbstractMatrix{<:Number},
     )
     (; M, U, V) = dist
-    σ2 = LinearAlgebra.diag(U) .* LinearAlgebra.diag(V)'
-    return _normal_logpdfs!(logp, M, σ2, x)
+    σU = sqrt.(LinearAlgebra.diag(U))
+    σV = sqrt.(LinearAlgebra.diag(V))
+    logp .= Distributions.logpdf.(Distributions.Normal.(M, σU .* σV'; check_args = false), x)
+    return logp
 end
 
-# Multivariate t-distribution: elementwise marginals are affine univariate t-distributions
+# Multivariate t-distribution: elementwise marginals are affine univariate t-distributions.
+# The normalization constant of the t-distribution (two loggamma evaluations) is hoisted out
+# of the elementwise broadcast.
 function pointwise_marginal_logpdfs!!(
-        logp::AbstractVector{<:Number},
+        logp::AbstractVector{T},
         dist::Distributions.GenericMvTDist,
         x::AbstractVector{<:Number},
-    )
-    return _tdist_logpdfs!(logp, dist.df, dist.μ, LinearAlgebra.diag(dist.Σ), x)
+    ) where {T <: Number}
+    (; μ, Σ) = dist
+    ν = dist.df
+    α = (ν + 1) / 2
+    logc = _tdist_lognorm(T, ν)
+    σ = sqrt.(LinearAlgebra.diag(Σ))
+    return @. logp = logc - α * log1p(((x - μ) / σ)^2 / ν) - log(σ)
 end
 
 # Matrix-variate t-distribution
 function pointwise_marginal_logpdfs!!(
-        logp::AbstractMatrix{<:Number},
+        logp::AbstractMatrix{T},
         dist::Distributions.MatrixTDist,
         x::AbstractMatrix{<:Number},
-    )
+    ) where {T <: Number}
     (; ν, M, Σ, Ω) = dist
-    σ2 = LinearAlgebra.diag(Σ) .* LinearAlgebra.diag(Ω)' ./ ν
-    return _tdist_logpdfs!(logp, ν, M, σ2, x)
+    α = (ν + 1) / 2
+    logc = _tdist_lognorm(T, ν)
+    σΣ = sqrt.(LinearAlgebra.diag(Σ))
+    σΩ = sqrt.(LinearAlgebra.diag(Ω)) ./ sqrt(ν)
+    return @. logp = logc - α * log1p(((x - M) / (σΣ * σΩ'))^2 / ν) - log(σΣ * σΩ')
 end
 
 # Dirichlet distribution: elementwise marginals are Beta distributions
@@ -304,18 +321,9 @@ end
 
 # Helper functions
 
-# elementwise log-pdf of Normal(μ, sqrt(σ2)) at x
-function _normal_logpdfs!(logp, μ, σ2, x)
-    logp .= Distributions.logpdf.(Distributions.Normal.(μ, sqrt.(σ2); check_args = false), x)
-    return logp
-end
-
-# elementwise log-pdf of μ + sqrt(σ2) * TDist(ν) at x, with the normalization constant
-# (two loggamma evaluations) hoisted out of the elementwise loop
-function _tdist_logpdfs!(logp::AbstractArray{T}, ν, μ, σ2, x) where {T}
-    α = (ν + 1) / 2
-    logc = SpecialFunctions.loggamma(α) - SpecialFunctions.loggamma(ν / 2) - (log(ν) + T(logπ)) / 2
-    return @. logp = logc - α * log1p((x - μ)^2 / (ν * σ2)) - log(σ2) / 2
+# log normalization constant of the standard t-distribution with ν degrees of freedom
+function _tdist_lognorm(::Type{T}, ν) where {T}
+    return SpecialFunctions.loggamma((ν + 1) / 2) - SpecialFunctions.loggamma(ν / 2) - (log(ν) + T(logπ)) / 2
 end
 
 # log(I_ν(s) / s^ν), which is finite as s → 0
