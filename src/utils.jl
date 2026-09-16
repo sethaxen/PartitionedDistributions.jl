@@ -109,3 +109,100 @@ function _reshape(  # resolve ambiguity
     }
     return _reshape(dist.dist, ())
 end
+
+# Helpers shared by the pointwise log-pdf functions
+
+function _logpdf_eltype(dist::Distributions.Distribution, x)
+    return typeof(log(one(promote_type(eltype(x), Distributions.partype(dist)))))
+end
+# work around type instability in partype(::AbstractMixtureModel)
+# https://github.com/JuliaStats/Distributions.jl/blob/3d304c26f1cffd6a5bcd24fac2318be92877f4d5/src/mixtures/mixturemodel.jl#L170C41-L170C48
+function _logpdf_eltype(dist::Distributions.AbstractMixtureModel, x::AbstractArray)
+    prob_type = eltype(Distributions.probs(dist))
+    components = Distributions.components(dist)
+    component_type = if isconcretetype(eltype(components))  # all components are the same type
+        _logpdf_eltype(first(components), x)
+    else
+        mapreduce(Base.Fix2(_logpdf_eltype, x), promote_type, components)
+    end
+    return promote_type(component_type, typeof(log(oneunit(prob_type))))
+end
+
+function _similar_logpdf(dist::Distributions.UnivariateDistribution, x::Number)
+    return zero(_logpdf_eltype(dist, x))
+end
+function _similar_logpdf(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate}, x
+    )
+    return similar(x, _logpdf_eltype(dist, x))
+end
+function _similar_logpdf(
+        dist::Distributions.ProductNamedTupleDistribution, x::NamedTuple{K}
+    ) where {K}
+    return map(_similar_logpdf, NamedTuple{K}(dist.dists), x)
+end
+
+# diag(inv(A)) without forming the full inverse
+function _pd_diag_inv(A::PDMats.AbstractPDMat)
+    T = typeof(float(oneunit(eltype(A))))
+    I = LinearAlgebra.Diagonal(ones(T, axes(A, 1)))
+    return PDMats.invquad(A, I)
+end
+
+# Logarithms of the modified Bessel functions, log(I_ν(t)) and log(K_ν(t)), for t > 0.
+#
+# The exponentially scaled functions from SpecialFunctions.jl are used whenever they can be
+# evaluated without underflow (besselix, for t ≪ ν) or overflow (besselkx, for t ≪ ν). Otherwise,
+# for large orders, the uniform asymptotic expansions of DLMF 10.41.3 and 10.41.4 with 5 terms
+# are used; their absolute error in the log is about 2e-7 for ν = 10 and decays as ν^-5.
+
+const _BESSEL_ASYMPTOTIC_MIN_ORDER = 10
+# AMOS signals overflow/underflow of the scaled functions at a log-magnitude of about 699-701,
+# slightly inside log(floatmax(Float64)) ≈ 709.8, so keep a margin.
+const _BESSEL_SCALED_LOG_LIMIT = 690.0
+
+function _logbesseli(ν::Real, t::Real)
+    T = float(promote_type(typeof(ν), typeof(t)))
+    return T(_logbesseli(Float64(ν), Float64(t)))
+end
+function _logbesseli(ν::Float64, t::Float64)
+    ν < _BESSEL_ASYMPTOTIC_MIN_ORDER && return log(SpecialFunctions.besselix(ν, t)) + t
+    logi = _logbesseli_asymptotic(ν, t)
+    # besselix(ν, t) = exp(-t) I_ν(t) ≤ 1 cannot overflow
+    logi - t > -_BESSEL_SCALED_LOG_LIMIT && return log(SpecialFunctions.besselix(ν, t)) + t
+    return logi
+end
+
+function _logbesselk(ν::Real, t::Real)
+    T = float(promote_type(typeof(ν), typeof(t)))
+    return T(_logbesselk(Float64(ν), Float64(t)))
+end
+function _logbesselk(ν::Float64, t::Float64)
+    ν < _BESSEL_ASYMPTOTIC_MIN_ORDER && return log(SpecialFunctions.besselkx(ν, t)) - t
+    logk = _logbesselk_asymptotic(ν, t)
+    # besselkx(ν, t) = exp(t) K_ν(t) ≥ sqrt(π / 2t) cannot underflow
+    logk + t < _BESSEL_SCALED_LOG_LIMIT && return log(SpecialFunctions.besselkx(ν, t)) - t
+    return logk
+end
+
+_logbesseli_asymptotic(ν, t) = _logbessel_uniform_asymptotic(ν, t, 1) - log(2π * ν) / 2
+_logbesselk_asymptotic(ν, t) = _logbessel_uniform_asymptotic(ν, t, -1) + log(π / (2ν)) / 2
+# shared part of DLMF 10.41.3 (sign = 1) and 10.41.4 (sign = -1) with t = ν z
+function _logbessel_uniform_asymptotic(ν, t, sign)
+    z = t / ν
+    s = hypot(one(z), z)  # sqrt(1 + z²)
+    p = inv(s)
+    η = s + log(z / (1 + s))
+    u1, u2, u3, u4 = _bessel_debye_polynomials(p)
+    series = 1 + sign * u1 / ν + u2 / ν^2 + sign * u3 / ν^3 + u4 / ν^4
+    return sign * ν * η - log(s) / 2 + log(series)
+end
+# U_1 to U_4 from DLMF 10.41.10
+function _bessel_debye_polynomials(p)
+    p2 = p^2
+    u1 = p * (3 - 5p2) / 24
+    u2 = p2 * (81 - 462p2 + 385p2^2) / 1152
+    u3 = p * p2 * (30375 - 369603p2 + 765765p2^2 - 425425p2^3) / 414720
+    u4 = p2^2 * (4465125 - 94121676p2 + 349922430p2^2 - 446185740p2^3 + 185910725p2^4) / 39813120
+    return u1, u2, u3, u4
+end

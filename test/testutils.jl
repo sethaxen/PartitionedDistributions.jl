@@ -5,6 +5,7 @@ using LinearAlgebra
 using PDMats: PDMat, PDiagMat, ScalMat
 using PartitionedDistributions
 using Random
+using SpecialFunctions: besselix, besselkx
 using Test
 
 """
@@ -110,6 +111,58 @@ function test_pointwise_matches_conditional(
     return nothing
 end
 
+"""
+    test_pointwise_marginal_matches_reference(dist, x, logp_ref; atol, rtol)
+
+Check `pointwise_marginal_logpdfs(dist, x)` against a reference `logp_ref`.
+
+Also checks that the result has the axes of `x` and that `pointwise_marginal_logpdfs!!` fills its
+first argument in-place.
+"""
+function test_pointwise_marginal_matches_reference(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        x::AbstractArray{<:Number},
+        logp_ref;
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_marginal_logpdfs(dist, x)
+    @test axes(logp) == axes(x)
+    @test logp ≈ logp_ref rtol = rtol atol = atol
+    logp2 = similar(logp)
+    @test pointwise_marginal_logpdfs!!(logp2, dist, x) === logp2
+    @test logp2 == logp
+    return nothing
+end
+
+"""
+    test_pointwise_marginal_matches_marginal(dist, x; atol, rtol)
+
+Check `pointwise_marginal_logpdfs(dist, x)` against `logpdf(marginal(dist, i), x[i])`.
+
+Requires a working `marginal` for `dist`; see [`test_pointwise_marginal_matches_reference`](@ref).
+"""
+function test_pointwise_marginal_matches_marginal(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        x::AbstractArray{<:Number};
+        kwargs...,
+    )
+    logp_ref = [logpdf(marginal(dist, i), x[i]) for i in LinearIndices(x)]
+    return test_pointwise_marginal_matches_reference(dist, x, logp_ref; kwargs...)
+end
+
+function test_pointwise_marginal_matches_marginal(
+        dist::Distributions.Distribution{<:Distributions.Univariate},
+        x::Number;
+        atol::Real = 0,
+        rtol::Real = default_rtol(dist, atol),
+    )
+    logp = pointwise_marginal_logpdfs(dist, x)
+    @test logp ≈ logpdf(dist, x) rtol = rtol atol = atol
+    @test pointwise_marginal_logpdfs!!(oftype(logp, NaN), dist, x) == logp
+    return nothing
+end
+
 # for distributions without a working `conditional`
 function test_pointwise_matches_marginal(
         dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
@@ -125,6 +178,198 @@ function test_pointwise_matches_marginal(
     return nothing
 end
 
+
+"""
+    numerical_marginal_logpdf(dist::Dirichlet, x, i; npts=100_000) -> Float64
+
+Reference log-density of `x[i]` for a 3-component `Dirichlet` by numerical integration.
+
+The joint density is integrated over the remaining free coordinate with a midpoint rule.
+"""
+function numerical_marginal_logpdf(dist::Dirichlet, x::AbstractVector, i::Int; npts::Int = 100_000)
+    length(dist) == 3 || throw(ArgumentError("only 3-component Dirichlet is supported"))
+    j, k = filter(!=(i), 1:3)
+    v = Float64(x[i])
+    w = 1 - v
+    h = w / npts
+    y = zeros(3)
+    y[i] = v
+    lps = map(1:npts) do m
+        t = (m - 0.5) * h
+        y[j] = t
+        y[k] = w - t
+        return logpdf(dist, y)
+    end
+    lmax = maximum(lps)
+    return lmax + log(sum(lp -> exp(lp - lmax), lps)) + log(h)
+end
+
+"""
+    numerical_marginal_logpdf(dist::LKJ, x, i, j; npts=1_000) -> Float64
+
+Reference log-density of the off-diagonal entry `x[i, j]` of a `3 × 3` `LKJ` by numerical integration.
+
+The joint density is integrated over the other two free correlations with a midpoint rule.
+"""
+function numerical_marginal_logpdf(dist::LKJ, x::AbstractMatrix, i::Int, j::Int; npts::Int = 1_000)
+    dist.d == 3 || throw(ArgumentError("only 3 × 3 LKJ is supported"))
+    i != j || throw(ArgumentError("only off-diagonal entries have a density"))
+    k = only(filter(∉((i, j)), 1:3))
+    R = Matrix{Float64}(I, 3, 3)
+    R[i, j] = R[j, i] = x[i, j]
+    h = 2 / npts
+    lps = Float64[]
+    for a in 1:npts, b in 1:npts
+        R[i, k] = R[k, i] = -1 + (a - 0.5) * h
+        R[j, k] = R[k, j] = -1 + (b - 0.5) * h
+        isposdef(R) || continue
+        push!(lps, logpdf(dist, R))
+    end
+    lmax = maximum(lps)
+    return lmax + log(sum(lp -> exp(lp - lmax), lps)) + 2 * log(h)
+end
+
+"""
+    vonmises_coordinate_logpdf(θ0, κ, i, t) -> Float64
+
+Reference log-density at `t` of the `i`th coordinate of `(cos θ, sin θ)` with `θ ~ VonMises(θ0, κ)`.
+
+Sums the `VonMises` density over the two angles that map to `t`; used for `VonMisesFisher` with `D = 2`.
+"""
+function vonmises_coordinate_logpdf(θ0, κ, i::Int, t)
+    vm = VonMises(θ0, κ)
+    wrap(θ) = mod(θ - θ0 + π, 2π) + θ0 - π  # into the support of `vm`
+    θs = i == 1 ? (acos(t), -acos(t)) : (asin(t), π - asin(t))
+    return log(sum(θ -> pdf(vm, wrap(θ)), θs)) - log((1 - t) * (1 + t)) / 2
+end
+
+"""
+    numerical_marginal_logpdf(dist::VonMisesFisher, x, i; npts=400) -> Float64
+
+Reference log-density of the coordinate `x[i]` of a `VonMisesFisher` on the 2-sphere by numerical integration.
+
+The joint density is integrated over the circle of unit vectors `y` with `y[i] == x[i]` using the
+midpoint rule, which is spectrally accurate for periodic integrands.
+"""
+function numerical_marginal_logpdf(dist::VonMisesFisher, x::AbstractVector, i::Int; npts::Int = 400)
+    length(dist) == 3 || throw(ArgumentError("only D = 3 is supported"))
+    j, k = filter(!=(i), 1:3)
+    t = Float64(x[i])
+    r = sqrt((1 - t) * (1 + t))
+    y = zeros(3)
+    y[i] = t
+    lps = map(1:npts) do m
+        φ = 2π * (m - 0.5) / npts
+        y[j] = r * cos(φ)
+        y[k] = r * sin(φ)
+        return logpdf(dist, y)
+    end
+    lmax = maximum(lps)
+    return lmax + log(sum(lp -> exp(lp - lmax), lps)) + log(2π / npts)
+end
+
+"""
+    enumerated_marginal_logpdf(dist, x, i) -> Float64
+
+Reference log-pmf of `x[i]` for a 3-category `Multinomial` or `DirichletMultinomial` by exhaustive summation.
+
+The joint pmf is summed over all configurations of the other two counts.
+"""
+function enumerated_marginal_logpdf(
+        dist::Union{Multinomial, DirichletMultinomial}, x::AbstractVector, i::Int,
+    )
+    length(dist) == 3 || throw(ArgumentError("only 3-category distributions are supported"))
+    j, k = filter(!=(i), 1:3)
+    r = dist.n - x[i]
+    y = zeros(Int, 3)
+    y[i] = x[i]
+    lps = map(0:r) do t
+        y[j] = t
+        y[k] = r - t
+        return logpdf(dist, y)
+    end
+    lmax = maximum(lps)
+    return lmax + log(sum(lp -> exp(lp - lmax), lps))
+end
+
+"""
+    logbesselk_recurrence(n::Int, t) -> Float64
+
+Reference `log(besselk(n, t))` for integer `n ≥ 0` by forward recurrence in log-space.
+
+Uses `K_{n+1}(t) = K_{n-1}(t) + (2n / t) K_n(t)`, which is stable in the forward direction.
+"""
+function logbesselk_recurrence(n::Int, t)
+    lk = log(besselkx(0.0, t)) - t
+    n == 0 && return lk
+    r = besselkx(1.0, t) / besselkx(0.0, t)  # K_1 / K_0
+    for m in 1:n
+        lk += log(r)  # log K_m
+        m == n && break
+        r = 1 / r + 2m / t  # K_{m+1} / K_m
+    end
+    return lk
+end
+
+"""
+    logbesseli_recurrence(n::Int, t) -> Float64
+
+Reference `log(besseli(n, t))` for integer `n ≥ 0` by Miller's backward recurrence in log-space.
+"""
+function logbesseli_recurrence(n::Int, t; extra::Int = 200)
+    nmax = n + extra + ceil(Int, t)
+    r = 0.0  # I_{nmax+1} / I_{nmax} ≈ 0
+    logratios = 0.0
+    for m in nmax:-1:1
+        r = 1 / (2m / t + r)  # I_m / I_{m-1}
+        m <= n && (logratios += log(r))
+    end
+    return log(besselix(0.0, t)) + t + logratios
+end
+
+"""
+    test_pointwise_marginal_mc_normalization(dist, nsamples; references, nsigma, max_se)
+
+Check the pointwise marginal densities of `dist` by importance sampling.
+
+For `x ~ dist` with marginal density `pᵢ` of `xᵢ` and any density `fᵢ` supported within that of
+`pᵢ`, `E[fᵢ(xᵢ) / pᵢ(xᵢ)] = 1`. Each reference in `references` maps `(i, samples of xᵢ)` to `fᵢ`;
+the mean weight must be within `nsigma` standard errors of 1, and the standard error below `max_se`.
+"""
+function test_pointwise_marginal_mc_normalization(
+        dist::Distributions.Distribution{<:Distributions.ArrayLikeVariate},
+        nsamples::Int;
+        references = default_mc_references,
+        nsigma::Real = 5,
+        max_se::Real = 0.02,
+    )
+    x1 = rand(dist)
+    xs = Matrix{eltype(x1)}(undef, length(x1), nsamples)
+    logps = Matrix{Float64}(undef, length(x1), nsamples)
+    for n in 1:nsamples
+        x = n == 1 ? x1 : rand(dist)
+        xs[:, n] = vec(x)
+        logps[:, n] = vec(pointwise_marginal_logpdfs(dist, x))
+    end
+    @test all(isfinite, logps)
+    @testset for i in 1:length(x1), ref in references
+        xi = view(xs, i, :)
+        f = ref(i, xi)
+        w = exp.(logpdf.(f, xi) .- view(logps, i, :))
+        se = std(w) / sqrt(nsamples)
+        @test se < max_se
+        @test mean(w) ≈ 1 atol = nsigma * se
+    end
+    return nothing
+end
+
+# reference for `test_pointwise_marginal_mc_normalization`: uniform between two sample quantiles
+uniform_between_quantiles(ql, qh) = (_, xi) -> Uniform(quantile(xi, (ql, qh))...)
+
+const default_mc_references = (
+    uniform_between_quantiles(0.25, 0.75),
+    uniform_between_quantiles(0.005, 0.995),
+)
 
 """
     test_marginal_moments_match(dist, inds...; test_var::Bool=true, test_cov::Bool=false)

@@ -18,4 +18,5 @@ Random.seed!(14579)
     include("utils.jl")
     include("conditional_marginal.jl")
     include("pointwise_conditional_logpdfs.jl")
+    include("pointwise_marginal_logpdfs.jl")
 end
