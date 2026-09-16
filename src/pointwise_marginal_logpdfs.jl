@@ -189,12 +189,20 @@ function pointwise_marginal_logpdfs!!(
     ) where {T <: Number}
     (; d, η) = dist
     a = η - 1 + d / 2
-    beta = Distributions.Beta(a, a; check_args = false)
-    @. logp = Distributions.logpdf(beta, (x + 1) / 2) - logtwo
-    for (il, ix) in zip(LinearAlgebra.diagind(logp), LinearAlgebra.diagind(x))
-        logp[il] = isone(x[ix]) ? zero(T) : T(-Inf)
+    lognorm = -(2a - 1) * logtwo - SpecialFunctions.logbeta(a, a)
+    broadcast!(logp, 1:d, (1:d)', x) do i, j, r
+        if i == j
+            return isone(r) ? zero(T) : T(-Inf)
+        else
+            return _lkj_offdiag_logpdf(a, lognorm, r)
+        end
     end
     return logp
+end
+# log-density at r of 2 * Beta(a, a) - 1, with the normalization constant hoisted into lognorm
+function _lkj_offdiag_logpdf(a, lognorm, r)
+    abs(r) <= 1 || return oftype(lognorm, -Inf)
+    return lognorm + LogExpFunctions.xlogy(a - 1, (1 - r) * (1 + r))
 end
 
 # Wishart distribution: diagonal entries are scaled χ² (Gamma) distributed, and off-diagonal
