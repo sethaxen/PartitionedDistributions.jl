@@ -200,7 +200,6 @@ end
 # Wishart distribution: diagonal entries are scaled χ² (Gamma) distributed, and off-diagonal
 # entries follow a variance-gamma distribution, see
 # https://en.wikipedia.org/wiki/Wishart_distribution#Marginal_distribution_of_matrix_elements
-# The log-density of Xᵢⱼ is written in terms of a = sqrt(Sᵢᵢ Sⱼⱼ) and det₂ = Sᵢᵢ Sⱼⱼ - Sᵢⱼ².
 function pointwise_marginal_logpdfs!!(
         logp::AbstractMatrix{T},
         dist::Distributions.Wishart,
@@ -209,27 +208,26 @@ function pointwise_marginal_logpdfs!!(
     (; S) = dist
     df = T(dist.df)
     ν = (df - 1) / 2
-    logc = -SpecialFunctions.loggamma(df / 2) - ν * logtwo - T(logπ) / 2
-    sd = sqrt.(LinearAlgebra.diag(S))
-    for j in axes(x, 2), i in axes(x, 1)
-        xij = x[i, j]
+    lognorm = -SpecialFunctions.loggamma(df / 2) - ν * logtwo - T(logπ) / 2
+    v = LinearAlgebra.diag(S)
+    d = size(S, 1)
+    broadcast!(logp, 1:d, (1:d)', x, S, v, v') do i, j, xij, Sij, vi, vj
         if i == j
-            gamma = Distributions.Gamma(df / 2, 2 * S[i, i]; check_args = false)
-            logp[i, j] = Distributions.logpdf(gamma, xij)
-            continue
-        end
-        a = sd[i] * sd[j]
-        Sij = S[i, j]
-        det2 = (a - Sij) * (a + Sij)
-        logp[i, j] = logc + if iszero(xij)
-            # limit x → 0 of the density below, using K_ν(t) ~ Γ(ν) 2^(ν - 1) t^(-ν)
-            SpecialFunctions.loggamma(ν) + (ν - 1) * logtwo + (ν - 1 // 2) * log(det2) - 2ν * log(a)
+            gamma = Distributions.Gamma(df / 2, 2 * vi; check_args = false)
+            return Distributions.logpdf(gamma, xij)
         else
-            t = abs(xij) * a / det2
-            ν * log(abs(xij) / a) + _logbesselk(ν, t) + Sij * xij / det2 - log(det2) / 2
+            return _wishart_offdiag_logpdf(ν, lognorm, Sij, vi, vj, xij)
         end
     end
     return logp
+end
+function _wishart_offdiag_logpdf(ν, lognorm, Sij, vi, vj, x)
+    a = sqrt(vi) * sqrt(vj)
+    loga = (log(vi) + log(vj)) / 2
+    ρ = Sij / a
+    ρ2c = (1 - ρ) * (1 + ρ)  # 1 - ρ²
+    b = a * ρ2c
+    return lognorm + _logbesselk_times_power(ν, abs(x) / b) + ρ * x / b - loga + (ν - 1 // 2) * log(ρ2c)
 end
 
 # von Mises–Fisher distribution: the marginal density of the coordinate xᵢ of x ∈ S^(D-1) is
@@ -333,6 +331,12 @@ function _tdist_lognorm(ν)
         SpecialFunctions.loggamma(ν / 2) -
         (log(ν) + logπ) / 2
     )
+end
+
+# log(t^ν K_ν(t)), which is finite as t → 0 for ν > 0 since K_ν(t) ~ Γ(ν) 2^(ν - 1) t^(-ν)
+function _logbesselk_times_power(ν, t)
+    iszero(t) && return SpecialFunctions.loggamma(ν) + (ν - 1) * oftype(float(t), logtwo)
+    return ν * log(t) + _logbesselk(ν, t)
 end
 
 # log(I_ν(s) / s^ν), which is finite as s → 0
