@@ -78,7 +78,6 @@ function pointwise_marginal_logpdfs!!(::Number, dist::Distributions.UnivariateDi
     return Distributions.logpdf(dist, x)
 end
 
-# Array-variate normal distributions: elementwise marginals are univariate normals
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.AbstractMvNormal,
@@ -89,7 +88,6 @@ function pointwise_marginal_logpdfs!!(
     @. logp = Distributions.logpdf(Distributions.Normal(μ, sqrt(v); check_args = false), x)
     return logp
 end
-# avoid forming the full covariance matrix
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.MvNormalCanon,
@@ -115,9 +113,6 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
-# Multivariate t-distribution: elementwise marginals are affine univariate t-distributions.
-# The normalization constant of the t-distribution (two loggamma evaluations) is hoisted out
-# of the elementwise broadcast.
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{T},
         dist::Distributions.GenericMvTDist,
@@ -131,7 +126,6 @@ function pointwise_marginal_logpdfs!!(
     return @. logp = logc - α * log1p(((x - μ) / sqrt(v))^2 / ν) - log(v) / 2
 end
 
-# Matrix-variate t-distribution
 function pointwise_marginal_logpdfs!!(
         logp::AbstractMatrix{T},
         dist::Distributions.MatrixTDist,
@@ -146,7 +140,6 @@ function pointwise_marginal_logpdfs!!(
     return @. logp = logc - α * log1p(((x - M) / (sqrt(vΣ) * sqrt(vΩ')))^2) - (log(vΣ) + log(vΩ')) / 2
 end
 
-# Dirichlet distribution: elementwise marginals are Beta distributions
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.Dirichlet,
@@ -157,7 +150,6 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
-# Multinomial distribution: elementwise marginals are Binomial distributions
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.Multinomial,
@@ -168,7 +160,6 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
-# Dirichlet-multinomial distribution: elementwise marginals are BetaBinomial distributions
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{<:Number},
         dist::Distributions.DirichletMultinomial,
@@ -180,7 +171,7 @@ function pointwise_marginal_logpdfs!!(
 end
 
 # LKJ distribution: off-diagonal marginals are 2 * Beta(a, a) - 1 with a = η - 1 + d / 2
-# (Lewandowski, Kurowicka & Joe (2009), doi: 10.1016/j.jmva.2009.04.008);
+# (§3.3 of Lewandowski, Kurowicka & Joe (2009), doi: 10.1016/j.jmva.2009.04.008);
 # diagonal entries are identically 1.
 function pointwise_marginal_logpdfs!!(
         logp::AbstractMatrix{T},
@@ -238,11 +229,16 @@ function _wishart_offdiag_logpdf(ν, lognorm, Sij, vi, vj, x)
     return lognorm + _logbesselk_times_power(ν, abs(x) / b) + ρ * x / b - loga + (ν - 1 // 2) * log(ρ2c)
 end
 
-# von Mises–Fisher distribution: the marginal density of the coordinate xᵢ of x ∈ S^(D-1) is
-#   C_D(κ) (2π)^((D-1)/2) (1 - xᵢ²)^ν exp(κ μᵢ xᵢ) I_ν(s) / s^ν,   ν = (D - 3) / 2,
-# with s = κ sqrt((1 - μᵢ²)(1 - xᵢ²)), obtained by integrating the density over the
-# (D-2)-sphere of directions orthogonal to eᵢ. The normalizing constant C_D(κ) is recomputed with
-# `_logbesseli` rather than taken from `dist` so that large D with small κ does not overflow.
+# von Mises–Fisher distribution
+# The marginal density of dot(v, x) for a von Mises–Fisher variate x
+# is given in Eq. 25 of:
+#   Romanazzi, M. (2014). "Discriminant Analysis with High Dimensional von Mises–Fisher
+#   Distributions." Athens Journal of Sciences, 1(4), 225–240.
+#   http://www.atiner.gr/journals/sciences/2014-1-4-1-Romanazzi.pdf
+# For the D = 3 case, see also Eq 4.4 of:
+#   Mardia, K. V. & Edwards, R. (1982). "Weighted distributions and rotating caps."
+#   Biometrika, 69(2), 323–330.
+#   https://doi.org/10.1093/biomet/69.2.323
 function pointwise_marginal_logpdfs!!(
         logp::AbstractVector{T},
         dist::Distributions.VonMisesFisher,
@@ -253,7 +249,8 @@ function pointwise_marginal_logpdfs!!(
     Dlower = D - 1
     ν = T(D // 2 - 1)
     νlower = T(Dlower // 2 - 1)
-    # log C_D(κ) + (D - 1) / 2 * log(2π)
+    # log C_D(κ) + (D - 1) / 2 * log(2π), recomputed with `_logbesseli` rather than taken from
+    # `dist.logCκ`, which overflows for large D with small κ
     logc = ν * log(κ) - T(log2π) / 2 - _logbesseli(ν, κ)
     logp .= _vmf_marginal_logpdf.(logc, κ, νlower, μ, x)
     return logp
@@ -268,8 +265,6 @@ function _vmf_marginal_logpdf(logc, κ, ν, μi, xi)
     return logc + κ * μi * xi + logjac + _logbesseli_over_power(ν, s)
 end
 
-# Mixtures of array-variate distributions: the marginal of a mixture is the mixture of the
-# marginals of its components with the same weights.
 function pointwise_marginal_logpdfs!!(
         logp::AbstractArray{<:Number, N},
         dist::Distributions.AbstractMixtureModel{Distributions.ArrayLikeVariate{N}},
@@ -286,7 +281,6 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
-# Product distributions: components are independent, so marginalize within each component
 function pointwise_marginal_logpdfs!!(
         logp::AbstractArray{<:Number, N},
         dist::Distributions.ProductDistribution{N, M},
@@ -304,7 +298,6 @@ function pointwise_marginal_logpdfs!!(
     return logp
 end
 
-# NamedTuple-variate product distributions
 function pointwise_marginal_logpdfs!!(
         logp::NamedTuple{K},
         dist::Distributions.ProductNamedTupleDistribution,
