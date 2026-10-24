@@ -11,7 +11,7 @@ Random.seed!(14579)
         Aqua.test_all(PartitionedDistributions)
     end
     @testset "Code linting (JET.jl)" begin
-        JET.test_package(PartitionedDistributions; target_defined_modules = true)
+        JET.test_package(PartitionedDistributions; target_modules = (PartitionedDistributions,))
     end
 
     include("testutils.jl")
